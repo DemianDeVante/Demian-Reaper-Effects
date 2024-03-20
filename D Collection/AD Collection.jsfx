@@ -1,0 +1,45 @@
+desc: D Embedded Collection
+tags: effect
+version: 1
+author: Demian D
+provides:
+  D 1175 Compressor.jsfx
+  D Analog Summing.jsfx
+  D Avocado Glitch.jsfx
+  D DeEsser.jsfx
+  D Distortion.jsfx
+  D Event Horizon Clipper.jsfx
+  D FairlyChild Compressor.jsfx
+  D Floaty Delay.jsfx
+  D Gain Panning.jsfx
+  D Gate.jsfx
+  D Huge Booty Bass.jsfx
+  D Louderizer.jsfx
+  D Master Limiter.jsfx
+  D MGA Limiter.jsfx
+  D Ozzifier.jsfx
+  D P3B EQ.jsfx
+  D Ping Pong Pan.jsfx
+  D Quick Delay.jsfx
+  D RBJ EQ.jsfx
+  D RBJ Highpass Lowpass.jsfx
+  D RC Inflator.jsfx
+  D Reverb Hall.jsfx
+  D Reverb Plate.jsfx
+  D Reverb Room.jsfx
+  D Saturation.jsfx
+  D Smooth Limiter.jsfx
+  D Stereoizer.jsfx
+  D Thunderkick.jsfx
+  D Tom Compressor.jsfx
+  D Transpire.jsfx
+  D Ugly Pitch Shifter.jsfx
+  ui-lib.jsfx-inc
+  qd.delay.jsfx-inc
+  delay-utils.jsfx-inc
+  qd.rbj_filter.jsfx-inc
+  pitch-detection.jsfx-inc
+  qd.saike_pitchlib.jsfx-inc
+  img/*.png
+  transpire_gfx/*.png
+  themes/bitmap-simple/*.png

@@ -1,0 +1,327 @@
+// Copyright 2006, Thomas Scott Stillwell
+// Portions Copyright (C) 2006 Cockos Incorporated
+// All rights reserved.
+//
+//Redistribution and use in source and binary forms, with or without modification, are permitted 
+//provided that the following conditions are met:
+//
+//Redistributions of source code must retain the above copyright notice, this list of conditions 
+//and the following disclaimer. 
+//
+//Redistributions in binary form must reproduce the above copyright notice, this list of conditions 
+//and the following disclaimer in the documentation and/or other materials provided with the distribution. 
+//
+//The name of Thomas Scott Stillwell may not be used to endorse or 
+//promote products derived from this software without specific prior written permission. 
+//
+//THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR 
+//IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND 
+//FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS 
+//BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+//(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR 
+//PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, 
+//STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+//THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+desc: D Ozzifier Chorus
+//tags: modulation pitch delay stereo
+//author: Stillwell
+
+slider1:2<0,6,1>-Number Of Voices
+slider2:10<0,120,0.1>-Time Spread (ms)
+slider3:20<0,120,1>-Pitch Spread (cents)
+slider4:-6<-120,6,1>-Wet Mix (dB)
+slider5:-6<-120,6,1>-Dry Mix (dB)
+slider6:100<0,100>-Pan Spread (%)
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+
+@init
+  freemem = ui_setup(1000000);
+  ext_tail_size = srate * 4;
+  bufsize = srate|0;
+  xfade=(srate*0.10)|0; // 100ms xfade
+  bufloc0 = 10000;
+  bufloc1 = bufloc0+bufsize+1000;
+  voiceptr0loc = bufloc1+bufsize+1000;
+  voicerateloc = voiceptr-loc+1000;
+  cospanloc = voicerateloc+1000;
+  sinpanloc = cospanloc+1000;
+
+  buffer0 = bufloc0;
+  buffer1 = bufloc1;
+  voiceptr0 = voiceptr0loc;
+  voicerate = voicerateloc;
+  cospan = cospanloc;
+  sinpan = sinpanloc;
+
+  bufdiff=bufloc1-bufloc0;
+
+  function slider_update_function() (
+    	needs_slider_update = 0;
+    	//------ Previous @slider code
+      numvoices = slider1;
+
+      delaytime = (slider2*0.001*srate)|0;
+
+      pitchspread = slider3;
+
+      totalpitch = pitchspread * numvoices;
+
+      bufsize = (delaytime)|0; 
+      xfade=(bufsize*0.05)|0;
+
+      drymix = 2 ^ (slider5/6); 
+      wetmix = 2 ^ (slider4/6);
+
+      panwidth = slider6/100;
+      lpan = 0.5 - (panwidth/2);
+      panincr = panwidth/max(1,numvoices-1);
+
+      i = 1;
+
+      loop(numvoices,
+        voicerate[i] = 2 ^ (-((totalpitch / 2) - (pitchspread * i)) / 1200);
+        voiceptr0[i] = bufloc0 + bufsize - (i/numvoices) * delaytime;
+        (voiceptr0[i] < bufloc0) ? voiceptr0[i] += bufsize;
+        cospan[i] = cos((lpan + (i - 1) * panincr) * $pi / 2);
+        sinpan[i] = sin((lpan + (i - 1) * panincr) * $pi / 2);
+        i += 1;
+      );
+    	//------ Previous @slider code
+  );
+
+@slider
+  slider_update_function();
+
+@block
+  needs_slider_update ? slider_update_function();
+
+@sample
+  wet0 = wet1 = 0;
+  i = 1;
+  loop(numvoices,
+    v0=voiceptr0[i]; iv0=0|(v0); frac0=v0-iv0;
+    iv02 = iv0 >= (bufloc0+bufsize-1) ? iv0-bufsize+1 : iv0+1;   
+  
+    ren0=(iv0[0]*(1-frac0)+iv02[0]*frac0);
+    ren1=(iv0[bufdiff]*(1-frac0)+iv02[bufdiff]*frac0);
+    vr=voicerate[i];
+
+    vr >= 1.0 ?
+    (
+      tv=v0;
+      tv>buffer0?tv-=bufsize;
+      (tv >= buffer0-xfade && tv < buffer0) ? (
+         // xfade
+        frac=(buffer0-tv)/xfade;
+        tmp=v0+xfade;
+        tmp>=bufloc0+bufsize?tmp-=bufsize;
+        tmp2=tmp>=bufloc0+bufsize-1?bufloc0:tmp+1;
+        ren0 = ren0*frac + (1-frac)*( tmp[0]*(1-frac0)+tmp2[0]*frac0 );
+        ren1 = ren1*frac + (1-frac)*( tmp[bufdiff]*(1-frac0)+tmp2[bufdiff]*frac0 );
+        tv+vr > buffer0+1 ? v0+=xfade;
+      );
+    ) : ( // read pointer moving slower than write pointer
+      tv=v0;
+      tv<buffer0?tv+=bufsize;
+      (tv >= buffer0 && tv < buffer0+xfade) ? (
+         // xfade
+        frac=(tv-buffer0)/xfade;
+        tmp=v0+xfade;
+        tmp>=bufloc0+bufsize?tmp-=bufsize;
+        tmp2=tmp>=bufloc0+bufsize-1?bufloc0:tmp+1;
+        ren0 = ren0*frac + (1-frac)*( tmp[0]*(1-frac0)+tmp2[0]*frac0 );
+        ren1 = ren1*frac + (1-frac)*( tmp[bufdiff]*(1-frac0)+tmp2[bufdiff]*frac0 );
+        tv+vr < buffer0+1 ? v0+=xfade;
+      );
+    );
+    wet0 += cospan[i] * ren0;
+    wet1 += sinpan[i] * ren1;
+    
+    ((v0+=vr) >= (bufloc0+bufsize)) ? v0 -= bufsize;
+    voiceptr0[i]=v0;
+    i += 1;
+  );
+
+  buffer0[0] = spl0; // write after reading it to avoid clicks
+  buffer0[bufdiff] = spl1;
+
+  spl0 = wet0 * wetmix + spl0 * drymix;
+  spl1 = wet1 * wetmix + spl1 * drymix;
+
+  ((buffer0+=1) >= (bufloc0 + bufsize)) ? buffer0 -= bufsize;
+
+@gfx 240 120
+
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+      ui_split_leftratio(3/8);
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber_down_title("Voices", slider1, "%i"));
+            gfx_ui_dial_rounded(7,slider1, 0, 6, 0, 2, 1);
+      ui_pop();
+      ui_split_leftratio(3/5);
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber_down_title("Time", slider2, "%.1f ms"));
+            gfx_ui_dial_rounded(7,slider2, 0, 120, 2, 10, 0.1);
+      ui_pop();
+      ui_split_leftratio(1);
+        ui_split_topratio(2/5);
+            gfx_ui_automate_slider(slider4, gfx_ui_layout_textnumber_clear("Wet Mix", slider4, "%i dB"));
+            gfx_ui_dial_rounded(9,slider4, -120, 0, -2, -6, 1);
+        ui_pop();
+        ui_split_topratio(19/20);
+            gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber_down_title("P", slider3, "%i cents"));
+            gfx_ui_dial_rounded(7,slider3, 0, 120, 0, 20, 1);
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+    control_start("main", "bitmap-simple");
+
+    ui_screen() === "main" ? (
+      ui_split_topratio(1/1); // single row
+        ui_split_leftratio(6/6);
+          // row 1, group 1
+          ui_split_leftratio(1/6);
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Number Of Voices", slider1, "%i"));
+            gfx_ui_dial_rounded(7,slider1, 0, 6, 0, 2, 1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Time Spread", slider2, "%.1f ms"));
+            gfx_ui_dial_rounded(7,slider2, 0, 120, 2, 10, 0.1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber("Pitch Spread", slider3, "%i cents"));
+            gfx_ui_dial_rounded(7,slider3, 0, 120, 0, 20, 1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider4, gfx_ui_layout_textnumber("Wet Mix", slider4, "%i dB"));
+            gfx_ui_dial_rounded(9,slider4, -120, 0, -2, -6, 1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber("Dry Mix", slider5, "%i dB"));
+            gfx_ui_dial_rounded(9,slider5, -120, 0, -2, -6, 1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider6, gfx_ui_layout_textnumber("Pan Spread", slider6, "%.4f %%"));
+            gfx_ui_automate_slider(slider6, control_dial(7,slider6, 0, 100, 2, 100));
+          ui_pop();
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  dem_initial_gfx_width = 240;  // inital width in @gfx width height
+  dem_initial_gfx_height = 120;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;

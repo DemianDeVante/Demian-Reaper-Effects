@@ -1,0 +1,386 @@
+desc: D QuickDelay
+author: tilr
+version: 1.0
+provides:
+  qdelay/qd.delay.jsfx-inc
+  qdelay/qd.rbj_filter.jsfx-inc
+  qdelay/qd.saike_pitchlib.jsfx-inc
+screenshot: https://raw.githubusercontent.com/tiagolr/tilr_jsfx/master/doc/qdelay.png
+about:
+  # QuickDelay
+
+  A simple delay with ping-pong mode, tempo sync, feedback filters and pitch shift.
+
+  #### Features
+
+  * Dual or single delay modes
+  * Normal and ping-pong modes
+  * Ping-pong stereo width control
+  * Tempo sync
+  * Low pass and high pass feedback filters with Q controls
+  * Feedback pitch shift
+  * Delay modulation
+
+slider1:delayms=250<1,1000>-Delay Time (ms)
+slider2:sync=0<0,16,1{Off,1/16,1/8,1/4,1/2,1/1,1/16t,1/8t,1/4t,1/2t,1/1t,1/16.,1/8.,1/4.,1/2.,1/1.}>Tempo sync
+slider3:_feedback=0<0,100>-Feedback
+slider4:mode=0<0,1,1{Normal,Ping-Pong}>-Mode
+slider5:spread=0<-100,100,1>-Spread
+
+slider8:lp_freq=20000<20,20000,1:log>-Low Pass
+slider9:lp_q=0.707<0.707,4,0.01:log>-Low Pass Q
+
+slider10:hp_freq=20<20,20000,1:log>-High Pass
+slider11:hp_q=0.707<0.707,4,0.01:log>-High Pass Q
+
+slider13:mod_amp=0<0,100>-Modulation amp
+slider14:mod_freq=1<1,8>-Modulation freq (Hz)
+slider15:_semitones=0<-12,12,1>-Transpose
+
+slider17:_dry=100<0,100>-Dry
+slider18:_wet=100<0,100>-Wet
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+import qd.delay.jsfx-inc
+import qd.rbj_filter.jsfx-inc
+import qd.saike_pitchlib.jsfx-inc
+
+@init
+	freemem = ui_setup(1000000);
+	// 10 second stereo delay line
+	d0.delay(2000000, srate * 10);
+	d1.delay(3000000, srate * 10);
+
+	function sine_wave(cycle) (
+	sin(cycle * 2 * $pi);
+	);
+
+	function rc_set(rc)
+	instance(a) (
+		a = 1 / (rc * srate + 1);
+	);
+	function rc_lp(sample)
+	instance(lp, a) (
+		lp += a * (sample - lp);
+	);
+	function smooth()
+	instance (lp, smooth) (
+		lp = smooth;
+		smooth = this.rc_lp(this);
+	);
+
+	function init_pitchlib ()
+	(
+	transition_region = 1024;
+	bufferSize = 4 * transition_region;
+	shifter.pitchShifter(1, transition_region, bufferSize, 2*65536, 3*65536, transition_region, 1);
+	);
+
+	init_pitchlib();
+
+	samps.rc_set(0.5);
+
+	function slider_update_function() (
+			needs_slider_update = 0;
+			//------ Previous @slider code
+			feedback = _feedback / 100;
+			lfactor = spread > 0 ? 1 - spread / 100 : 1;
+			rfactor = spread < 0 ? 1 + spread / 100 : 1;
+			rhaas = !mode && -spread > 0 ? srate / 100 * -spread / 100 : 0; // 100 ms max haas
+			lhaas = !mode && spread > 0 ? srate / 100 * spread / 100 : 0; // 100 ms max haas
+
+			lp_l.rbj_lp(lp_freq, lp_q);
+			lp_r.rbj_lp(lp_freq, lp_q);
+			hp_l.rbj_hp(hp_freq, hp_q);
+			hp_r.rbj_hp(hp_freq, hp_q);
+
+			semitones = 2*((2^(_semitones/12))-1.0);
+			dry = _dry / 100;
+			wet = _wet / 100;
+			//------ Previous @slider code
+	);
+
+@slider
+	slider_update_function()
+
+@block
+	while (midirecv(offset, msg1, note, vel)) (
+	event = msg1 & 0xF0;
+	event == 0xB0 && note == 123 ? ( // All notes off
+		memset(d0.buf, 0, d0.size);
+		memset(d1.buf, 0, d1.size);
+	);
+	);
+
+	sync > 0 ? (
+	sync == 1 ? delayms = 60000 / 4 / tempo:        // 1/16
+	sync == 2 ? delayms = 60000 / 2 / tempo:        // 1/8
+	sync == 3 ? delayms = 60000 / tempo:            // 1/4
+	sync == 4 ? delayms = 60000 * 2 / tempo:        // 1/2
+	sync == 5 ? delayms = 60000 * 4 / tempo:        // 1/1
+	sync == 6 ? delayms = 60000 / 6 / tempo:        // 1/16t
+	sync == 7 ? delayms = 60000 / 3 / tempo:        // 1/8t
+	sync == 8 ? delayms = 60000 / 3 * 2 / tempo:    // 1/4t
+	sync == 9 ? delayms = 60000 / 3 * 4 / tempo:    // 1/2t
+	sync == 10 ? delayms = 60000 / 3 * 8 / tempo:   // 1/1t
+	sync == 11 ? delayms = 60000 / 4 * 1.5 / tempo: // 1/16.
+	sync == 12 ? delayms = 60000 / 2 * 1.5 / tempo: // 1/8.
+	sync == 13 ? delayms = 60000 * 1.5 / tempo:     // 1/4.
+	sync == 14 ? delayms = 60000 * 2 * 1.5 / tempo: // 1/2.
+	sync == 15 ? delayms = 60000 * 4 * 1.5 / tempo: // 1/1.
+	1;
+	);
+
+	delayms > 10000 ? delayms = 10000;
+	samps = delayms * 0.001 * srate; // delay time in samples
+
+	needs_slider_update ? slider_update_function();
+
+@sample
+
+	play_state & 1 && !(lplay_state & 1) ? (
+	samps.smooth = samps;
+	);
+	lplay_state = play_state;
+
+	samps.smooth();
+
+	// modulation sinewave
+	mod_amp ? (
+	cycle += mod_freq / srate;
+	cycle > 1 ? cycle -= 1;
+	wave = sine_wave(cycle);
+	) : (
+	wave = 0;
+	);
+
+	// read with cubic interpolation
+	val0 = d0.delay_read3(samps.smooth + wave * mod_amp + lhaas);
+	val1 = d1.delay_read3(samps.smooth + wave * mod_amp + rhaas);
+
+	// apply filters on delay signal
+	lp_freq < 20000 ? (
+	val0 = lp_l.rbj_df1(val0);
+	val1 = lp_r.rbj_df1(val1);
+	);
+	hp_freq > 20 ? (
+	val0 = hp_l.rbj_df1(val0);
+	val1 = hp_r.rbj_df1(val1);
+	);
+
+	mode == 0 ? ( // normal
+	left = spl0 + val0 * feedback;
+	right = spl1 + val1 * feedback;
+	) : ( // ping pong
+	left = spl0 * lfactor + val1 * feedback;
+	right = spl1 * rfactor + val0 * feedback
+	);
+
+	_semitones ? (
+	shifter.pitchShifterUpdate(left, right);
+	shifter.setPitchShifterSpeed(semitones);
+	left = shifter.outL;
+	right = shifter.outR;
+	);
+
+	// write values in delay lines
+	d0.delay_write(left);
+	d1.delay_write(right);
+
+	// sum and output
+	spl0 = spl0*dry + val0*wet;
+	spl1 = spl1*dry + val1*wet;
+
+
+@gfx 300 250
+
+	function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+		(gfx_h <= dem_min_ui_height) ? (
+		ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+		gfx_h = dem_min_ui_height
+		);
+	);
+
+	function gfx_ui_automate_slider(slidervar*, new_value) (
+		slidervar !== new_value ? (
+		slidervar = new_value;
+		slider_automate(slidervar);
+		);
+		new_value;
+	);
+
+	function gfx_ui_layout_textnumber(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_top(h);
+		ui_text(title);
+		ui_pop();
+		ui_split_bottom(h);
+		value = control_hidden_textnumber(value, value*1.00000001, format);
+		ui_pop();
+		value;
+	);
+
+	function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_top(h);
+		ui_text(title);
+		ui_pop();
+		value;
+	);
+
+	function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_top(h);
+		value = control_hidden_textnumber(value, value*1.00000001, format);
+		ui_pop();
+		value;
+	);
+
+	function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_bottom(h);
+		ui_text(title);
+		ui_pop();
+		value;
+	);
+
+	function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_bottom(h);
+		value = control_hidden_textnumber(value, value*1.00000001, format);
+		ui_pop();
+		value;
+	);
+
+	function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		value = control_hidden_textnumber(value, value*1.00000001, format);
+		value;
+	);
+
+	function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+		slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+		slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+		gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+	);
+
+	function gfx_ui_layout_text(title, text) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_top(h);
+		ui_text(title);
+		ui_pop();
+		ui_split_bottom(h);
+		ui_text(text);
+		ui_pop();
+	);
+
+	function gfx_ui_layout_title(title) (
+		gfx_ui_layout_text(title, "");
+	);
+
+	function gfx_ui_radio_option(value, optionValue, optionText) (
+		ui_align(0.1, 0.5);
+		ui_split_left(30);
+		value = control_radio(value, optionValue);
+		ui_pop();
+		ui_click() ? value = optionValue;
+		ui_text(optionText);
+		value;
+	);
+
+	function dem_mcp_ui() (
+		control_start("main", "bitmap-simple", 0);
+
+		ui_screen() === "main" ? (
+		ui_split_leftratio(2/5);
+			ui_split_topratio(1/2);
+							gfx_ui_automate_slider(delayms, gfx_ui_layout_textnumber_down_title("Time", delayms, "%.2f ms"));
+							gfx_ui_automate_slider(delayms, control_dial(7,delayms, 1, 1000, log(1000/1), 250));
+			ui_split_next();
+							gfx_ui_automate_slider(hp_freq, gfx_ui_layout_textnumber_down_title("HP", hp_freq, "%.2f"));
+							gfx_ui_automate_slider(hp_freq, control_dial(8,hp_freq, 20, 20000, log(20000/20), 20));
+			ui_pop();
+		ui_pop();
+		ui_split_leftratio(1/3);
+			ui_split_topratio(19/20);
+			ui_split_topratio(1/3);
+							gfx_ui_automate_slider(_dry, gfx_ui_layout_textnumber_down_title("Dry", _dry, "%.2f"));
+							gfx_ui_automate_slider(_dry, control_dial(9,_dry, 0, 100, 2, 100));
+			ui_split_next();
+							gfx_ui_automate_slider(spread, gfx_ui_layout_textnumber_down_title("Wide", spread, "%i"));
+							gfx_ui_dial_rounded(9,spread, -100, 100, 0, 0, 1);
+			ui_split_next();
+							gfx_ui_automate_slider(_wet, gfx_ui_layout_textnumber_down_title("Wet", _wet, "%.2f"));
+							gfx_ui_automate_slider(_wet, control_dial(9,_wet, 0, 100, 2, 100));
+			ui_pop();
+			ui_pop();
+		ui_pop();
+		ui_split_leftratio(1);
+			ui_split_topratio(1/2);
+							gfx_ui_automate_slider(_feedback, gfx_ui_layout_textnumber_down_title("Feed", _feedback, "%.2f"));
+							gfx_ui_automate_slider(_feedback, control_dial(7,_feedback, 0, 100, 2, 0));
+			ui_split_next();
+							gfx_ui_automate_slider(lp_freq, gfx_ui_layout_textnumber_down_title("LP", lp_freq, "%.2f"));
+							gfx_ui_automate_slider(lp_freq, control_dial(8,lp_freq, 20, 20000, log(20000/20), 20000));
+			ui_pop();
+		ui_pop();
+		) : control_system();
+	);
+
+	function dem_full_ui() (
+		control_start("main", "bitmap-simple", 0);
+
+		ui_screen() === "main" ? (
+		ui_split_leftratio(2/5);
+			ui_split_topratio(1/2);
+							gfx_ui_automate_slider(delayms, gfx_ui_layout_textnumber("Delay Time", delayms, "%.2f ms"));
+							gfx_ui_automate_slider(delayms, control_dial(7,delayms, 1, 1000, log(1000/1), 250));
+			ui_split_next();
+							gfx_ui_automate_slider(hp_freq, gfx_ui_layout_textnumber("High Pass", hp_freq, "%.2f"));
+							gfx_ui_automate_slider(hp_freq, control_dial(8,hp_freq, 20, 20000, log(20000/20), 20));
+			ui_pop();
+		ui_pop();
+		ui_split_leftratio(1/3);
+			ui_split_topratio(1/3);
+							gfx_ui_automate_slider(_dry, gfx_ui_layout_textnumber("Dry", _dry, "%.2f"));
+							gfx_ui_automate_slider(_dry, control_dial(9,_dry, 0, 100, 2, 100));
+			ui_split_next();
+							gfx_ui_automate_slider(spread, gfx_ui_layout_textnumber("Spread", spread, "%i"));
+							gfx_ui_dial_rounded(9,spread, -100, 100, 0, 0, 1);
+			ui_split_next();
+							gfx_ui_automate_slider(_wet, gfx_ui_layout_textnumber("Wet", _wet, "%.2f"));
+							gfx_ui_automate_slider(_wet, control_dial(9,_wet, 0, 100, 2, 100));
+			ui_pop();
+		ui_pop();
+		ui_split_leftratio(1);
+			ui_split_topratio(1/2);
+							gfx_ui_automate_slider(_feedback, gfx_ui_layout_textnumber("Feedback", _feedback, "%.2f"));
+							gfx_ui_automate_slider(_feedback, control_dial(7,_feedback, 0, 100, 2, 0));
+			ui_split_next();
+							gfx_ui_automate_slider(lp_freq, gfx_ui_layout_textnumber("Low Pass", lp_freq, "%.2f"));
+							gfx_ui_automate_slider(lp_freq, control_dial(8,lp_freq, 20, 20000, log(20000/20), 20000));
+			ui_pop();
+		ui_pop();
+		) : control_system();
+	);
+
+	dem_initial_gfx_width = 300;  // inital width in @gfx width height
+	dem_initial_gfx_height = 250;  // inital height in @gfx width height
+	dem_max_mcp_width = 120;   // maximum embedded width
+	dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+	gfx_w <= dem_max_mcp_width ? (
+		uix_default_fontsize = 7;
+		dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+		dem_mcp_ui();
+
+	) : (
+		uix_default_fontsize = 12;
+		//dem_min_ui_size(121, 121);
+		dem_full_ui();
+	);
+
+	ui_interacted() ? needs_slider_update = 1;

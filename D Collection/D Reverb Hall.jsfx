@@ -1,0 +1,410 @@
+desc: D Reverb Hall
+
+slider1:0<-48,12,0.1>-Dry (dB)
+slider2:-6<-48,12,0.1>-Wet (dB)
+slider3:1<0,10,0.001>-Length (s)
+slider4:0<0,100,1>-Pre-Delay (ms)
+slider5:240<0,1000,1>-Lowdamp (Hz)
+slider6:2400<1000,10000,1>-Highdamp (Hz)
+slider7:1<0,1,1{mono,stereo}>-Mode
+
+slider11:20<1,25,1>-xth Prime
+slider12:5<1,25,1>-+y 0
+slider13:10<1,25,1>-+y 1
+slider14:14<1,25,1>-+y 2
+slider15:18<1,25,1>-+y 3
+slider16:4<1,25,1>-+y 4
+slider17:16<1,25,1>-+y 5
+slider18:2<1,25,1>-+y 6
+slider19:10<1,25,1>-+y 7
+slider20:5<1,25,1>-+y 8
+slider21:15<1,25,1>-+y 9
+slider22:3<1,25,1>-+y 10
+
+slider25:37<0,100,1>-(if stereo) L/R offset (%)
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:L in
+in_pin:R in
+out_pin:L out
+out_pin:R out
+
+@init
+  freemem = ui_setup(1000000);
+  //tmp1 = tmp2 = 0;
+  t1 = t2 = 0;
+  t12 = t22 = 0;
+
+  g1 = g2 = g3 = g4 = 0.62;
+  g5 = 0.62;
+  g7 = 0.62;
+  g9 = 0.62;
+  g11 = 0.62;
+
+  function slider_update_function() (
+    	needs_slider_update = 0;
+    	//------ Previous @slider code
+    dry = slider1 <= -48.0 ? 0.0 : 10^(slider1/20);
+    wet = slider2 <= -48.0 ? 0.0 : 10^(slider2/20)*0.5;
+    d = exp( -$pi*slider5/srate );
+    d2 = exp( -2*$pi*slider6/srate );
+
+    primenumber= (slider11-1)^2+slider11+40;
+    primenumber2= primenumber+(slider12-1)^2+slider12+40;
+    primenumber3= primenumber2+(slider13-1)^2+slider13+40;
+    primenumber4= primenumber3+(slider14-1)^2+slider14+40;
+    primenumber5= primenumber4+(slider15-1)^2+slider15+40;
+    primenumber6= primenumber5+(slider16-1)^2+slider16+40;
+    primenumber7= primenumber6+(slider17-1)^2+slider17+40;
+    primenumber8= primenumber7+(slider18-1)^2+slider18+40;
+    primenumber9= primenumber8+(slider19-1)^2+slider19+40;
+    primenumber10= primenumber9+(slider20-1)^2+slider20+40;
+    primenumber11= primenumber10+(slider21-1)^2+slider21+40;
+    primenumber12= primenumber11+(slider22-1)^2+slider22+40;
+
+    l0 = slider4/1000*srate + 1|0; // added "|0"
+    l1 = primenumber;
+    l2 = primenumber2;
+    l3 = primenumber3;
+    l4 = primenumber4;
+    l5 = primenumber5;
+    l6 = primenumber6;
+    l7 = primenumber7;
+    l8 = primenumber8;
+    l9 = primenumber9;
+    l10 = primenumber10;
+    l11 = primenumber11;
+    l12 = primenumber12;
+
+    f = exp( log(0.001) / (slider3*srate / (l5+l6+l7+l8)) );
+
+    Rl0 = slider4/1000*srate + 1|0; // added "|0"
+    Rl1 = l1;
+    Rl2 = l2-slider25;
+    Rl3 = l3+slider25;
+    Rl4 = l4-slider25;
+    Rl5 = l5+slider25;
+    Rl6 = l6-slider25;
+    Rl7 = l7+slider25;
+    Rl8 = l8-slider25;
+    Rl9 = l9+slider25;
+    Rl10 = l10-slider25;
+    Rl11 = l11+slider25;
+    Rl12 = l12-slider25;
+
+    b0 = 0;
+    b1 = b0+l0;
+    b2 = b1+l1;
+    b3 = b2+l2;
+    b4 = b3+l3;
+    b5 = b4+l4;
+    b6 = b5+l5;
+    b7 = b6+l6;
+    b8 = b7+l7;
+    b9 = b8+l8;
+    b10 = b9+l9;
+    b11 = b10+l10;
+    b12 = b11+l11;
+
+    Rb0 = b12+l12;
+    Rb1 = Rb0+Rl0;
+    Rb2 = Rb1+Rl1;
+    Rb3 = Rb2+Rl2;
+    Rb4 = Rb3+Rl3;
+    Rb5 = Rb4+Rl4;
+    Rb6 = Rb5+Rl5;
+    Rb7 = Rb6+Rl6;
+    Rb8 = Rb7+Rl7;
+    Rb9 = Rb8+Rl8;
+    Rb10 = Rb9+Rl9;
+    Rb11 = Rb10+Rl10;
+    Rb12 = Rb11+Rl11;
+    	//------ Previous @slider code
+  );
+
+@slider
+  slider_update_function()
+
+@block
+  needs_slider_update ? slider_update_function();
+
+@sample
+  slider7 == 0 ? (
+  input = spl0;
+  Rinput = spl1;
+
+  /* LEFT+RIGHT CHANNEL */
+  in = (spl0+spl1)*0.5;
+  in0=in;out0=b0[p0];b0[p0]=in0;p0=(p0+1)%l0;
+  in1=out0;out1=b1[p1]-g1*in1;b1[p1]=in1+g1*out1;p1=(p1+1)%l1;
+  in2=out1;out2=b2[p2]-g2*in2;b2[p2]=in2+g2*out2;p2=(p2+1)%l2;
+  in3=out2;out3=b3[p3]-g3*in3;b3[p3]=in3+g3*out3;p3=(p3+1)%l3;
+  in4=out3;out4=b4[p4]-g4*in4;b4[p4]=in4+g4*out4;p4=(p4+1)%l4;
+
+  tmp1 = out4 + out12 * f;
+  tmp2 = out4 + out8 * f;
+
+  tmp1 -= t12 = tmp1 + d * (t12-tmp1);
+  tmp2 -= t22 = tmp2 + d * (t22-tmp2);
+
+  tmp1 = t1 = tmp1 + d2 * (t1-tmp1);
+  tmp2 = t2 = tmp2 + d2 * (t2-tmp2);
+
+  in5=tmp1;out5=b5[p5]-g5*in5;b5[p5]=in5+g5*out5;p5=(p5+1)%l5;
+  in6=out5;out6=b6[p6];b6[p6]=in6;p6=(p6+1)%l6;
+  in7=out6;out7=b7[p7]-g7*in7;b7[p7]=in7+g7*out7;p7=(p7+1)%l7;
+  in8=out7;out8=b8[p8];b8[p8]=in8;p8=(p8+1)%l8;
+
+  in9=tmp2;out9=b9[p9]-g9*in9;b9[p9]=in9+g9*out9;p9=(p9+1)%l9;
+  in10=out9;out10=b10[p10];b10[p10]=in10;p10=(p10+1)%l10;
+  in11=out10;out11=b11[p11]-g11*in11;b11[p11]=in11+g11*out11;p11=(p11+1)%l11;
+  in12=out11;out12=b12[p12];b12[p12]=in12;p12=(p12+1)%l12;
+
+  out = out5 + out7 + out9 + out11;
+
+  // OUTPUT
+  spl0 = input*dry + out*wet;
+  spl1 = Rinput*dry + out*wet;
+  );
+
+  slider7 == 1 ? (
+  input = spl0;
+  Rinput = spl1;
+
+  /* LEFT CHANNEL */
+  in = spl0;
+  in0=in;out0=b0[p0];b0[p0]=in0;p0=(p0+1)%l0;
+  in1=out0;out1=b1[p1]-g1*in1;b1[p1]=in1+g1*out1;p1=(p1+1)%l1;
+  in2=out1;out2=b2[p2]-g2*in2;b2[p2]=in2+g2*out2;p2=(p2+1)%l2;
+  in3=out2;out3=b3[p3]-g3*in3;b3[p3]=in3+g3*out3;p3=(p3+1)%l3;
+  in4=out3;out4=b4[p4]-g4*in4;b4[p4]=in4+g4*out4;p4=(p4+1)%l4;
+
+  tmp1 = out4 + out12 * f;
+  tmp2 = out4 + out8 * f;
+
+  tmp1 -= t12 = tmp1 + d * (t12-tmp1);
+  tmp2 -= t22 = tmp2 + d * (t22-tmp2);
+
+  tmp1 = t1 = tmp1 + d2 * (t1-tmp1);
+  tmp2 = t2 = tmp2 + d2 * (t2-tmp2);
+
+  in5=tmp1;out5=b5[p5]-g5*in5;b5[p5]=in5+g5*out5;p5=(p5+1)%l5;
+  in6=out5;out6=b6[p6];b6[p6]=in6;p6=(p6+1)%l6;
+  in7=out6;out7=b7[p7]-g7*in7;b7[p7]=in7+g7*out7;p7=(p7+1)%l7;
+  in8=out7;out8=b8[p8];b8[p8]=in8;p8=(p8+1)%l8;
+
+  in9=tmp2;out9=b9[p9]-g9*in9;b9[p9]=in9+g9*out9;p9=(p9+1)%l9;
+  in10=out9;out10=b10[p10];b10[p10]=in10;p10=(p10+1)%l10;
+  in11=out10;out11=b11[p11]-g11*in11;b11[p11]=in11+g11*out11;p11=(p11+1)%l11;
+  in12=out11;out12=b12[p12];b12[p12]=in12;p12=(p12+1)%l12;
+
+  out = out5 + out7 + out9 + out11;
+
+  /* RIGHT CHANNEL */
+  Rin = spl1;
+  Rin0=Rin;Rout0=Rb0[Rp0];Rb0[Rp0]=Rin0;Rp0=(Rp0+1)%Rl0;
+  Rin1=Rout0;Rout1=Rb1[Rp1]-g1*Rin1;Rb1[Rp1]=Rin1+g1*Rout1;Rp1=(Rp1+1)%Rl1;
+  Rin2=Rout1;Rout2=Rb2[Rp2]-g2*Rin2;Rb2[Rp2]=Rin2+g2*Rout2;Rp2=(Rp2+1)%Rl2;
+  Rin3=Rout2;Rout3=Rb3[Rp3]-g3*Rin3;Rb3[Rp3]=Rin3+g3*Rout3;Rp3=(Rp3+1)%Rl3;
+  Rin4=Rout3;Rout4=Rb4[Rp4]-g4*Rin4;Rb4[Rp4]=Rin4+g4*Rout4;Rp4=(Rp4+1)%Rl4;
+
+  Rtmp1 = Rout4 + Rout12 * f;
+  Rtmp2 = Rout4 + Rout8 * f;
+
+  Rtmp1 -= Rt12 = Rtmp1 + d * (Rt12-Rtmp1);
+  Rtmp2 -= Rt22 = Rtmp2 + d * (Rt22-Rtmp2);
+
+  Rtmp1 = Rt1 = Rtmp1 + d2 * (Rt1-Rtmp1);
+  Rtmp2 = Rt2 = Rtmp2 + d2 * (Rt2-Rtmp2);
+
+  Rin5=Rtmp1;Rout5=Rb5[Rp5]-g5*Rin5;Rb5[Rp5]=Rin5+g5*Rout5;Rp5=(Rp5+1)%Rl5;
+  Rin6=Rout5;Rout6=Rb6[Rp6];Rb6[Rp6]=Rin6;Rp6=(Rp6+1)%Rl6;
+  Rin7=Rout6;Rout7=Rb7[Rp7]-g7*Rin7;Rb7[Rp7]=Rin7+g7*Rout7;Rp7=(Rp7+1)%Rl7;
+  Rin8=Rout7;Rout8=Rb8[Rp8];Rb8[Rp8]=Rin8;Rp8=(Rp8+1)%Rl8;
+
+  Rin9=Rtmp2;Rout9=Rb9[Rp9]-g9*Rin9;Rb9[Rp9]=Rin9+g9*Rout9;Rp9=(Rp9+1)%Rl9;
+  Rin10=Rout9;Rout10=Rb10[Rp10];Rb10[Rp10]=Rin10;Rp10=(Rp10+1)%Rl10;
+  Rin11=Rout10;Rout11=Rb11[Rp11]-g11*Rin11;Rb11[Rp11]=Rin11+g11*Rout11;Rp11=(Rp11+1)%Rl11;
+  Rin12=Rout11;Rout12=Rb12[Rp12];Rb12[Rp12]=Rin12;Rp12=(Rp12+1)%Rl12;
+
+  Rout = Rout5 + Rout7 + Rout9 + Rout11;
+
+  // OUTPUT
+  spl0 = input*dry + out*wet;
+  spl1 = Rinput*dry + Rout*wet;
+  );
+
+@gfx 240 120
+
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+      ui_split_leftratio(3/8);
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber_down_title("Wet", slider2, "%.1f dB"));
+            gfx_ui_dial_rounded(8,slider2, -48, 12, 0, -6, 0.1);
+      ui_pop();
+      ui_split_leftratio(3/5);
+            gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber_down_title("Len", slider3, "%.3f s"));
+            gfx_ui_dial_rounded(7,slider3, 0, 10, 0, 1, 0.001);
+      ui_pop();
+      ui_split_leftratio(1);
+        ui_split_topratio(2/5);
+            gfx_ui_automate_slider(slider4, gfx_ui_layout_textnumber_clear("Pre-Delay", slider4, "%i ms"));
+            gfx_ui_dial_rounded(9,slider4, 0, 100, 0, 0, 1);
+        ui_pop();
+        ui_split_topratio(19/20);
+            gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber_down_title("HP", slider5, "%i Hz"));
+            gfx_ui_dial_rounded(9,slider5, 0, 1000, 0, 240, 1);
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+    control_start("main", "bitmap-simple", 0);
+
+    ui_screen() === "main" ? (
+      ui_split_topratio(1/1); // single row
+        ui_split_leftratio(4/6);
+          // row 1, group 1
+          ui_split_leftratio(1/4);
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Wet", slider2, "%.1f dB"));
+            gfx_ui_dial_rounded(8,slider2, -48, 12, 0, -6, 0.1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber("Length", slider3, "%.1f s"));
+            gfx_ui_dial_rounded(7,slider3, 0, 10, 0, 1, 0.001);
+          ui_split_next();
+            gfx_ui_automate_slider(slider4, gfx_ui_layout_textnumber("Pre-Delay", slider4, "%i ms"));
+            gfx_ui_dial_rounded(9,slider4, 0, 100, 0, 0, 1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber("High Pass", slider5, "%i Hz"));
+            gfx_ui_dial_rounded(9,slider5, 0, 1000, 0, 240, 1);
+          ui_pop();
+        ui_pop();
+        ui_split_leftratio(2/2);
+          // row 1, group 2
+          control_group("Tools");
+          ui_split_leftratio(1/2);
+            gfx_ui_automate_slider(slider6, gfx_ui_layout_textnumber("Low Pass", slider6, "%i Hz"));
+            gfx_ui_dial_rounded(3,slider6, 1000, 10000, log(10000/1000), 2400, 1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Dry", slider1, "%.1f dB"));
+            gfx_ui_dial_rounded(3,slider1, -48, 12, 0, 0, 0.1);
+          ui_pop();
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  dem_initial_gfx_width = 240;  // inital width in @gfx width height
+  dem_initial_gfx_height = 120;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;

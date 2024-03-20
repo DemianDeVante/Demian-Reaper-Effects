@@ -1,0 +1,257 @@
+desc: D Gate
+
+// by witti
+
+slider1:-120<-120,0,0.1>-Threshold (dB)
+slider2:50<0,500,1>-Hold (ms)
+slider3:1<1,50,0.1>-Fade-in (ms)
+slider4:100<10,1000,1>-Fade-out (ms)
+
+slider6:0<0,1,1{Off,On}>-Delta
+
+slider5:10<0,25,0.1>-RMS Size (ms)
+slider7:0<-24,24,0.1>-Output (dB)
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:L in
+in_pin:R in
+out_pin:L out
+out_pin:R out
+
+@init
+  freemem = ui_setup(1000000);
+  silentcnt=0;
+  seekv=1;
+  seekto=1;
+  function slider_update_function() (
+    	needs_slider_update = 0;
+    	//------ Previous @slider code
+      thresh=10^(slider1/20);
+      sillen=slider2*srate*0.001|0;
+      fadein=1/pow(10,1/(slider3*srate*0.001));
+      fadeout=1/pow(10,1/(slider4*srate*0.001));
+      rmscoef=1/pow(10,1/(slider5*srate*0.001));
+      output=10^(slider7/20);
+    	//------ Previous @slider code
+  );
+
+@slider
+  slider_update_function();
+
+@block
+  needs_slider_update ? slider_update_function();
+
+@sample
+  in0=spl0;
+  in1=spl1;
+
+  slider5 > 0 ? (
+  ave=in0*in0+in1*in1;
+  runave=ave+rmscoef*(runave-ave);
+  det=sqrt(runave);
+  a=det > thresh;
+  ):(
+  ave = 0;
+  a=abs(in0) > thresh || abs(in1) > thresh;
+  );
+
+  a ? (
+  silentcnt=0;
+  seekto=1;
+  ):(
+  (silentcnt+=1) > sillen ? seekto=0;
+  );
+
+  seekto > 0.5 ? ( // fading in
+  seekv=seekv*fadein + (1-fadein);
+  ):( // fading out
+  seekv=seekv*fadeout;
+  );
+
+  s0=spl0;
+  s1=spl1;
+
+  spl0=spl0*seekv;
+  spl1=spl1*seekv;
+
+  slider6 == 1 ? (
+  spl0=s0-spl0;
+  spl1=s1-spl1;
+  );
+
+  spl0*=output;
+  spl1*=output;
+
+@gfx 240 120
+
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+      ui_split_leftratio(3/8);
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber_down_title("Thres", slider1, "%.1f dB"));
+            gfx_ui_dial_rounded(7,slider1, -120, 0, -2.5, -120, 0.1);
+      ui_pop();
+      ui_split_leftratio(3/5);
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber_down_title("Hold", slider2, "%i ms"));
+            gfx_ui_dial_rounded(7,slider2, 0, 500, log(500/50), 50, 1);
+      ui_pop();
+      ui_split_leftratio(1);
+        ui_split_topratio(2/5);
+            gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber_clear("Fade-in", slider3, "%.1f ms"));
+            gfx_ui_dial_rounded(9,slider3, 1, 50, log(50/1), 1, 0.1);
+        ui_pop();
+        ui_split_topratio(19/20);
+            gfx_ui_automate_slider(slider4, gfx_ui_layout_textnumber_down_title("Fade", slider4, "%i ms"));
+            gfx_ui_dial_rounded(9,slider4, 10, 1000, log(1000/10), 100, 1);
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+    control_start("main", "bitmap-simple", 0);
+
+    ui_screen() === "main" ? (
+      ui_split_topratio(1/1); // single row
+        ui_split_leftratio(7/7);
+          // row 1, group 1
+          ui_split_leftratio(1/7);
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Threshold", slider1, "%.1f dB"));
+            gfx_ui_dial_rounded(7,slider1, -120, 0, -2.5, -120, 0.1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Hold", slider2, "%i ms"));
+            gfx_ui_dial_rounded(7,slider2, 0, 500, log(500/50), 50, 1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber("Fade-in", slider3, "%.1f ms"));
+            gfx_ui_dial_rounded(9,slider3, 1, 50, log(50/1), 1, 0.1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider4, gfx_ui_layout_textnumber("Fade-out", slider4, "%i ms"));
+            gfx_ui_dial_rounded(9,slider4, 10, 1000, log(1000/10), 100, 1);
+          ui_split_next();
+            gfx_ui_layout_text("", slider6 ? "Delta" : "In");
+            ui_pad(-1, 0);
+            gfx_ui_automate_slider(slider6, control_switch(slider6));
+          ui_split_next();
+            gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber("RMS Size", slider5, "%.1f ms"));
+            gfx_ui_dial_rounded(7,slider5, 0, 25, 2, 10, 0.1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider7, gfx_ui_layout_textnumber("Output", slider7, "%.1f dB"));
+            gfx_ui_dial_rounded(6,slider7, -24, 24, 0, 0, 0.1);
+          ui_pop();
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  dem_initial_gfx_width = 240;  // inital width in @gfx width height
+  dem_initial_gfx_height = 120;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;

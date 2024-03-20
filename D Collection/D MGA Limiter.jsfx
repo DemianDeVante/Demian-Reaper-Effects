@@ -1,0 +1,244 @@
+// MGA JS Limiter: Limits the maximum output volume of a audio signal
+// Copyright (C) 2008  Michael Gruhn
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+desc:D MGA Limiter
+//tags: dynamics limiter
+//author: LOSER
+
+slider1:0<-30,0,0.1>-Threshold (dB)
+slider2:200<0,500,1>-Release (ms)
+slider3:-0.1<-6,0,0.1>-Ceiling
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+
+@init
+	freemem = ui_setup(1000000);
+	HOLDTIME = srate/128;
+	ext_tail_size = -1;
+	ext_gr_meter = 0;
+
+	r1Timer = 0;
+	r2Timer = HOLDTIME/2;
+
+	gr_meter=1;
+	gr_meter_decay = exp(1/(1*srate));
+	
+	function slider_update_function() (
+			needs_slider_update = 0;
+			//------ Previous @slider code
+			thresh = 10^(slider1/20);
+			ceiling = 10^(slider3/20);
+			volume = ceiling/thresh;
+
+			release = slider2/1000;
+			r = exp(-3/(srate*max(release,0.05)));
+			//------ Previous @slider code
+	);
+
+@slider
+	slider_update_function()
+@sample
+	maxSpls=max(abs(spl0),abs(spl1));
+
+	(r1Timer+=1) > HOLDTIME ? (r1Timer = 0; max1Block = 0; );
+	max1Block = max(max1Block,maxSpls);
+	(r2Timer+=1) > HOLDTIME ? (r2Timer = 0; max2Block = 0; );
+	max2Block = max(max2Block,maxSpls);
+
+	envT = max(max1Block,max2Block);
+
+	env = env < envT ? envT : envT + r*(env-envT);
+
+	(env > thresh) ? gain = (g_meter=(thresh / env))*volume : (g_meter=1; gain=volume;);
+
+	spl0*=gain;
+	spl1*=gain;
+
+	g_meter < gr_meter ? gr_meter=g_meter : ( gr_meter*=gr_meter_decay; gr_meter>1?gr_meter=1; );
+
+@block 
+	ext_gr_meter = gr_meter > 0 ? log(gr_meter) * (20/log(10)) : -150; 
+	needs_slider_update ? slider_update_function();
+
+@gfx 240 120
+	function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+		(gfx_h <= dem_min_ui_height) ? (
+		ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+		gfx_h = dem_min_ui_height
+		);
+	);
+
+	function gfx_ui_automate_slider(slidervar*, new_value) (
+		slidervar !== new_value ? (
+		slidervar = new_value;
+		slider_automate(slidervar);
+		);
+		new_value;
+	);
+
+	function gfx_ui_layout_textnumber(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_top(h);
+		ui_text(title);
+		ui_pop();
+		ui_split_bottom(h);
+		value = control_hidden_textnumber(value, value*1.00000001, format);
+		ui_pop();
+		value;
+	);
+
+	function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_top(h);
+		ui_text(title);
+		ui_pop();
+		value;
+	);
+
+	function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_top(h);
+		value = control_hidden_textnumber(value, value*1.00000001, format);
+		ui_pop();
+		value;
+	);
+
+	function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_bottom(h);
+		ui_text(title);
+		ui_pop();
+		value;
+	);
+
+	function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_bottom(h);
+		value = control_hidden_textnumber(value, value*1.00000001, format);
+		ui_pop();
+		value;
+	);
+
+	function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		value = control_hidden_textnumber(value, value*1.00000001, format);
+		value;
+	);
+
+	function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+		slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+		slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+		gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+	);
+
+	function gfx_ui_layout_text(title, text) local(h) (
+		h = max((ui_height() - 60)/2, ui_height()*0.2);
+		ui_split_top(h);
+		ui_text(title);
+		ui_pop();
+		ui_split_bottom(h);
+		ui_text(text);
+		ui_pop();
+	);
+
+	function gfx_ui_layout_title(title) (
+		gfx_ui_layout_text(title, "");
+	);
+
+	function gfx_ui_radio_option(value, optionValue, optionText) (
+		ui_align(0.1, 0.5);
+		ui_split_left(30);
+		value = control_radio(value, optionValue);
+		ui_pop();
+		ui_click() ? value = optionValue;
+		ui_text(optionText);
+		value;
+	);
+
+	function dem_mcp_ui() (
+		control_start("main", "bitmap-simple", 0);
+
+		ui_screen() === "main" ? (
+			ui_split_topratio(19/20); // single row
+				ui_split_leftratio(3/3);
+					// row 1, group 1
+					ui_split_leftratio(12/32);
+						gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber_down_title("Thres", slider1, "%.1f dB"));
+						gfx_ui_dial_rounded(7,slider1, -30, 0, -2, 0, 0.1);
+					ui_pop();
+					ui_split_leftratio(8/20);
+						ui_split_topratio(1/10);
+						ui_pop();
+						ui_split_topratio(8/9);
+							gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber_down_title("Rel", slider2, "%i ms"));
+							gfx_ui_dial_rounded(9,slider2, 0, 500, 0, 200, 1);
+						ui_pop();
+					ui_pop();
+					ui_split_topratio(1);
+						gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber_down_title("Ceil", slider3, "%.1f"));
+						gfx_ui_dial_rounded(8,slider3, -6, 0, -2, -0.1, 0.1);
+					ui_pop();
+				ui_pop();
+			ui_pop();
+		) : control_system();
+	);
+
+	function dem_full_ui() (
+		control_start("main", "bitmap-simple", 0);
+
+		ui_screen() === "main" ? (
+			ui_split_topratio(1/1); // single row
+				ui_split_leftratio(3/3);
+					// row 1, group 1
+					ui_split_leftratio(1/3);
+						gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Threshold", slider1, "%.1f dB"));
+						gfx_ui_dial_rounded(7,slider1, -30, 0, -2, 0, 0.1);
+					ui_split_next();
+						gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Release", slider2, "%i ms"));
+						gfx_ui_dial_rounded(9,slider2, 0, 500, 0, 200, 1);
+					ui_split_next();
+						gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber("Ceiling", slider3, "%.1f"));
+						gfx_ui_dial_rounded(8,slider3, -6, 0, -2, -0.1, 0.1);
+					ui_pop();
+				ui_pop();
+			ui_pop();
+		) : control_system();
+	);
+
+	dem_initial_gfx_width = 240;  // inital width in @gfx width height
+	dem_initial_gfx_height = 120;  // inital height in @gfx width height
+	dem_max_mcp_width = 120;   // maximum embedded width
+	dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+	gfx_w <= dem_max_mcp_width ? (
+		uix_default_fontsize = 7;
+		dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+		dem_mcp_ui();
+
+	) : (
+		uix_default_fontsize = 12;
+		//dem_min_ui_size(121, 121);
+		dem_full_ui();
+	);
+
+	ui_interacted() ? needs_slider_update = 1;

@@ -1,0 +1,503 @@
+// License: GPL - http://www.gnu.org/licenses/gpl.html
+// avocado (ducking glitch generator)
+// by daniel arena (dan@remaincalm.org)
+// http://remaincalm.org
+// 2008/09/16 - first version! contact me with bugs etc
+// 2008/09/20 - updated: tempo sync, handle slider and buffer changes more gracefully
+
+desc: D Avocado Glitch
+//tags: processing mangler glitch
+//author: remaincalm.org
+
+slider1:50<0,4000,1>-Buffer Length (ms)
+slider2:90<0,100,1>-Mix (%)
+slider3:8<1,16,1>-Buffers 
+slider4:70<0,99,1>-Repeat Probability (%)
+slider5:5<0,100,1>-Pitch Modulation Probability (%)
+slider6:10<0,99,1>-Reverse Probability (%)
+slider7:18<0,99,1>-Fadeout Probability (%)
+slider8:8<0,99,1>-Threshold (%)
+slider9:15<0,99,1>-Glitch Attack (%)
+slider10:0<0,4,1{Off,Major,Minor,Fifths,Octaves}>-Arpeggiator Mode
+slider11:0<0,64,1>-Tempo Sync (64th notes, 0 to disable)
+//slider12:0<0,100,1>Modulate Buffer Length
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+
+@init
+  freemem = ui_setup(1000000);
+  pi = 3.141592653589793;
+  fade_samples = 48; // controls fade in/out on buffer playback
+  play_rate = 1;
+  max_bufsiz = ceil(4000 * srate / 1000);
+  max_buffers = 16;
+  r_offset = max_bufsiz * max_buffers + 1;
+  notedata_offset = r_offset * 2;
+  sync_counter = 0;
+  is_recording = 0;
+  playback_buffer = 0;
+  playback_csr = 0;
+  record_buffer = 0;
+  record_csr = 0;
+  function slider_update_function() (
+    	needs_slider_update = 0;
+    	//------ Previous @slider code
+      bufsiz = slider1 * srate / 1000;
+      
+      // arpeg data major
+      (slider10 == 1) ?
+      (
+          d_arp = "Major";
+          // 1.18920 -- minor
+          max_arpeg = 4;
+          note[notedata_offset + 0] = 1;
+          note[notedata_offset + 1] = 1.25993;
+          note[notedata_offset + 2] = 1.49830;
+          note[notedata_offset + 3] = 2;
+      );
+      // arpeg data minor
+      (slider10 == 2) ?
+      (
+          d_arp = "Minor";
+
+          // 1.18920 -- minor
+          max_arpeg = 4;
+          note[notedata_offset + 0] = 1;
+          note[notedata_offset + 1] = 1.18920;
+          note[notedata_offset + 2] = 1.49830;
+          note[notedata_offset + 3] = 2;
+      );
+      // arpeg data fifths
+      (slider10 == 3) ?
+      (
+          d_arp = "Fifths";
+
+          // 1.33485 -- ?
+          max_arpeg = 3;
+          note[notedata_offset + 0] = 1;
+          note[notedata_offset + 1] = 1.49830;
+          note[notedata_offset + 2] = 2;
+      );
+      // arpeg data octaves
+      (slider10 == 4) ?
+      (
+          d_arp = "Octaves";
+
+          // 1.33485 -- ?
+          max_arpeg = 3;
+          note[notedata_offset + 0] = 1;
+          note[notedata_offset + 1] = 2;
+          note[notedata_offset + 2] = 3;
+      );
+      // arpeg data octaves
+      (slider10 == 0) ?
+      (
+          d_arp = "Off";
+      );
+    	//------ Previous @slider code
+  );
+@block
+  (slider11 > 0 && tempo > 0) ?
+  (
+    (slider1 | 0 != (1000 * slider11 * 60/16/tempo) | 0) ?
+      (slider1 = 1000 * slider11 * 60/16/tempo;);
+  );
+  //slider12 = can_start_rec_or_play;
+  needs_slider_update ? slider_update_function();
+
+@slider
+  slider_update_function();
+
+@sample
+  /*
+  record:
+    if rnd() > ?, start recording else stop recording.
+    if recording, add to buffer. if buffer full, stop recording.
+  */
+  // if we're beat syncing, only record on start of beat etc
+  can_start_rec_or_play = (old_tempo == tempo && old_slider1 == slider1) ? can_start_rec_or_play : false;
+  can_start_rec_or_play = can_start_rec_or_play || (slider11 == 0);
+  can_start_rec_or_play = can_start_rec_or_play || (((beat_position * 256) | 0) == ((beat_position | 0) * 256));
+  old_tempo = tempo;
+  old_slider1 = slider1;
+
+  (is_recording) ?
+  (
+    buffer[max_bufsiz*record_buffer + record_csr] = spl0;
+    buffer[r_offset + max_bufsiz*record_buffer + record_csr] = spl1;
+    record_csr += 1;
+
+    record_csr > bufsiz ? 
+    (
+      // TODO: measure volume level of that block
+      is_recording = false;
+      
+      // resync occasionally (every 16 sec)
+      sync_counter += 1;
+      (slider11 > 0 && sync_counter > srate * 16 / bufsiz) ? 
+      (
+        sync_counter = 0;
+        can_start_rec_or_play = 0;
+      );
+      
+    );
+
+  ):
+  (
+    can_start_rec_or_play ?
+    (
+      // start recording
+      record_buffer = floor(rand(slider3));
+      record_csr = 0;
+      is_recording = 1;
+    );
+  );
+
+
+  /*
+  playback:
+    if buffer ended, choose either same buffer or a new buffer  
+    play selected buffer
+  */
+  playback_csr = (can_start_rec_or_play) ? playback_csr : 0;
+  floor(playback_csr) > bufsiz ?
+  (
+    playback_csr = 0;
+
+    // TODO: try and choose a block that matches last input volume level?
+
+    rand(100) > slider4 ?
+    (
+      playback_buffer = floor(rand(slider3));
+    );
+
+    // change rate  
+    (slider10 > 0) ? /*  c64 style! */
+    (
+      play_rate = note[notedata_offset + arpeg_idx];
+      arpeg_idx = (arpeg_idx + 1) % max_arpeg;
+
+      //play_rate = (play_rate == 1) ? 1.25993 : (play_rate == 1.25993) ? 2 : 1;    
+    ) : (
+      // normal!
+      play_rate = 1;
+      (rand(100)> 110 - slider5) ?
+      (
+        play_rate = 2;
+      );
+    ) ;  
+
+    // mutilation options
+    // reverse block?
+    ( rand(100)> 105 - slider6) ?
+    (
+      i=0;
+      loop
+      (ceil(bufsiz/2 - 2),
+        start_pos = max_bufsiz*playback_buffer + i;
+        end_pos = max_bufsiz*playback_buffer + bufsiz - i - 1;
+        swapL = buffer[start_pos];
+        swapR = buffer[r_offset + start_pos];
+        buffer[start_pos] = buffer[end_pos];
+        buffer[r_offset + start_pos] = buffer[r_offset + end_pos];
+        buffer[end_pos] = swapL;
+        buffer[r_offset + end_pos] = swapR;
+        i += 1;
+      );
+    );
+
+    // quieten block?
+    ( rand(100)> 105 - slider7) ?
+    (
+      i=0;
+      loop
+      (ceil(bufsiz),
+        buffer[max_bufsiz*playback_buffer + i] *= 0.85;
+        buffer[r_offset + max_bufsiz*playback_buffer + i] *= 0.85;
+        i += 1;
+      );
+    );
+  );
+
+  // fade edges
+  mult = 1;
+
+  (floor(playback_csr) < fade_samples) ?
+  (
+    mult = floor(playback_csr)/fade_samples;
+  ) :
+  (
+    (floor(playback_csr) > bufsiz - fade_samples) ?
+    (
+      mult = (bufsiz - floor(playback_csr) - 1)/fade_samples;
+    );
+  ); 
+
+  // calculate raw output
+  tmpL = mult * buffer[max_bufsiz*playback_buffer + floor(playback_csr)];
+  tmpR = mult * buffer[r_offset + max_bufsiz*playback_buffer + floor(playback_csr)];
+
+  // move cursor
+  playback_csr += play_rate;
+
+
+  // TODO: filter?
+
+  // calculate threshold - moving slightly to correct for input level
+  (max(abs(spl1),abs(spl0)) > thresh) ?
+  (
+    thresh = thresh * 0.9 + 0.1 * max(abs(spl1),abs(spl0));
+  ) :
+  (
+    thresh = thresh * 0.98 + 0.02 * max(abs(spl1),abs(spl0));
+  );
+  (thresh > max(slider8/100, max_thresh * slider8/65)) ?
+  (
+    target_gain = 1;
+  ) : (
+    target_gain = 1 - (slider2/100);
+  );
+  max_thresh = (thresh > max_thresh) ? max(max_thresh, max_thresh * 0.1 + thresh * 0.9) : max_thresh * 0.99998;
+
+  // output mix
+  (target_gain > gain) ?
+  (
+    gain = gain * 0.95 + 0.05 * target_gain;
+  ) : 
+  (
+    gain = gain * (1 - slider9 / 100000) + slider9 / 100000 * target_gain;
+  );
+  last_gain = gain;
+
+  // output
+  (can_start_rec_or_play) ?
+  (
+    spl0 = spl0 * gain + tmpL*(1-gain);
+    spl1 = spl1 * gain + tmpR*(1-gain);
+  ) :
+  (
+    spl0 = spl0;// * gain + tmpL*(1-gain);
+    spl1 = spl1; // * gain + tmpR*(1-gain);
+  );
+
+@gfx 480 240
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+      ui_split_leftratio(2/5);
+              gfx_ui_automate_slider(slider8, gfx_ui_layout_textnumber_down_title("Thres", slider8, "%i %%"));
+              gfx_ui_dial_rounded(7,slider8, 0, 99, 0, 8, 1);
+      ui_pop();
+      ui_split_leftratio(1/3);
+          ui_split_topratio(1/5);
+          ui_pop();
+          ui_split_topratio(3/4);
+              gfx_ui_automate_slider(slider9, gfx_ui_layout_textnumber_down_title("Atk", slider9, "%i %%"));
+              gfx_ui_dial_rounded(7,slider9, 0, 99, 0, 15, 1);
+          ui_pop();
+      ui_pop();
+      ui_split_leftratio(1);
+              gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber_down_title("Mix", slider2, "%i %%"));
+              gfx_ui_dial_rounded(8,slider2, 0, 100, 0, 90, 1);
+      ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+    control_start("main", "bitmap-simple", 0);
+
+    ui_screen() === "main" ? (
+      ui_split_topratio(1/1); // single row
+        ui_split_leftratio(3/11);
+            // row 1, group 1
+            control_group("Buffers");
+            ui_split_topratio(1/3);
+              gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Length", slider1, "%i ms"));
+              gfx_ui_dial_rounded(7,slider1, 0, 4000, 0, 50, 1);
+            ui_split_next();
+              gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber("Amount", slider3, "%i"));
+              gfx_ui_dial_rounded(7,slider3, 1, 16, log(16/1), 8, 1);
+            ui_split_next();
+              gfx_ui_automate_slider(slider11, gfx_ui_layout_textnumber("Sync (64th)", slider11, "%i"));
+              gfx_ui_dial_rounded(7,slider11, 0, 64, 0, 0, 1);
+            ui_pop();
+          ui_pop();
+        ui_split_leftratio(5/8);
+            // row 1, group 2
+            control_group("Glitch Probability");
+            ui_split_leftratio(1/3);
+              ui_split_topratio(1/2);
+                ui_split_topratio(1/10);
+                ui_pop();
+                ui_split_topratio(8/9);
+                    gfx_ui_automate_slider(slider4, gfx_ui_layout_textnumber("Repeat", slider4, "%i %%"));
+                    gfx_ui_dial_rounded(9,slider4, 0, 99, 0, 70, 1);
+                ui_pop();
+              ui_split_next();
+                ui_split_topratio(1/10);
+                ui_pop();
+                ui_split_topratio(8/9);
+                    gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber("Pitch", slider5, "%i %%"));
+                    gfx_ui_dial_rounded(9,slider5, 0, 100, 0, 5, 1);
+                ui_pop();
+              ui_pop();
+            ui_split_next();
+                ui_split_topratio(1/3);
+                ui_pop();
+                ui_split_topratio(1/2);
+
+                    gfx_ui_automate_slider(slider10, gfx_ui_layout_textnumber("Arp", slider10, sprintf(#,"%s",d_arp)));
+                    gfx_ui_dial_rounded(9,slider10, 0, 4, 0, 0, 1);
+                ui_pop();
+            ui_split_next();
+              ui_split_topratio(1/2);
+                ui_split_topratio(1/10);
+                ui_pop();
+                ui_split_topratio(8/9);
+                    gfx_ui_automate_slider(slider7, gfx_ui_layout_textnumber("Fadeout", slider7, "%i %%"));
+                    gfx_ui_dial_rounded(9,slider7, 0, 99, 0, 18, 1);
+                ui_pop();
+              ui_split_next();
+                ui_split_topratio(1/10);
+                ui_pop();
+                ui_split_topratio(8/9);
+                    gfx_ui_automate_slider(slider6, gfx_ui_layout_textnumber("Reverse", slider6, "%i %%"));
+                    gfx_ui_dial_rounded(9,slider6, 0, 99, 0, 10, 1);
+                ui_pop();
+              ui_pop();
+            ui_pop();
+        ui_pop();
+        ui_split_leftratio(3/3);
+            // row 1, group 3
+            control_group("Mix");
+            ui_split_topratio(1/3);
+              gfx_ui_automate_slider(slider8, gfx_ui_layout_textnumber("Threshold", slider8, "%i %%"));
+              gfx_ui_dial_rounded(7,slider8, 0, 99, 0, 8, 1);
+            ui_split_next();
+              gfx_ui_automate_slider(slider9, gfx_ui_layout_textnumber("Attack", slider9, "%i %%"));
+              gfx_ui_dial_rounded(7,slider9, 0, 99, 0, 15, 1);
+            ui_split_next();
+              gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Mix", slider2, "%i %%"));
+              gfx_ui_dial_rounded(8,slider2, 0, 100, 0, 90, 1);
+            ui_pop();
+        ui_pop();
+      ui_pop();
+    );
+  );
+
+  dem_initial_gfx_width = 240;  // inital width in @gfx width height
+  dem_initial_gfx_height = 120;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;

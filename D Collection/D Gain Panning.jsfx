@@ -1,0 +1,249 @@
+desc:D Gain Panning
+//tags: utility gain stereo
+//author: Cockos
+
+slider1:0<-20,20,0.1>-Volume (dB)
+slider2:0<-100,100,0.1>-Pan
+slider3:0<-6,6,0.5>-Pan Law (dB)
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+
+@init
+  freemem = ui_setup(1000000);
+
+  ext_tail_size = -2;
+  AMP_dB_i=1/8.68588963806504;
+
+  db=slider1; // initialize here but not in @slider for playback start
+  pan=0.01*slider2;
+  function slider_update_function() (
+    	needs_slider_update = 0;
+    	//------ Previous @slider code
+      panlaw=exp(slider3*AMP_DB_i);
+      pancomp=(panlaw > 1.0 ? 1.0/panlaw : panlaw);
+      ddb=0.0;
+      dpan=0.0;
+    	//------ Previous @slider code
+  );
+
+@slider
+
+  panlaw=exp(slider3*AMP_DB_i);
+  pancomp=(panlaw > 1.0 ? 1.0/panlaw : panlaw);
+  ddb=0.0;
+  dpan=0.0;
+
+@block
+
+  cnt=0;
+  ddb=0.0;
+  dpan=0.0;
+
+  db_chg_splpos=slider_next_chg(1, tgtdb);
+  db_chg_splpos > 0 ? 
+  (
+    db=slider1;
+  ) : (
+    tgtdb = slider1;
+    db_chg_splpos = samplesblock;
+  );
+
+  ddb=(tgtdb-db)/db_chg_splpos;
+
+  pan_chg_splpos=slider_next_chg(2, tgtpan);
+  pan_chg_splpos > 0 ? 
+  (
+    pan=0.01*slider2;
+  ) : (
+    tgtpan = slider2;
+    pan_chg_splpos = samplesblock;
+  );
+  dpan=(tgtpan*0.01-pan)/pan_chg_splpos;
+  needs_slider_update ? slider_update_function();
+
+@sample
+
+  cnt == db_chg_splpos ? 
+  (
+    ddb=0.0;
+    db_chg_splpos=slider_next_chg(1, tgtdb);
+    db_chg_splpos > cnt ? 
+    (
+      ddb=(tgtdb-db)/(db_chg_splpos-cnt);
+    );
+  );
+
+  cnt == pan_chg_splpos ? 
+  (
+    dpan=0.0;
+    pan_chg_splpos=slider_next_chg(2, tgtpan);
+    pan_chg_splpos > cnt ? 
+    (
+      dpan=(tgtpan*0.01-pan)/(pan_chg_splpos-cnt);
+    );
+  );
+
+  adj=exp(db*AMP_DB_i);
+  panlaw != 1.0 ? 
+  (
+    panlaw > 1.0 ? adj *= panlaw;
+    panatt = abs(pan);
+    adj *= pancomp+(1.0-pancomp)*(2.0/(2.0-panatt)-1.0);
+  );
+
+  adj0=adj1=adj;
+  pan < 0.0 ? adj1 *= 1.0+pan;
+  pan > 0.0 ? adj0 *= 1.0-pan;
+
+  spl0 *= adj0;
+  spl1 *= adj1;
+
+  db += ddb;
+  pan += dpan;
+  cnt += 1;
+
+@gfx 240 120
+
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_2(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_3(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_slider_bar(slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_slider_x(slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+
+    ui_screen() === "main" ? (
+          ui_split_leftratio(1/2);
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber_3("Pan", slider2, "%.1f"));
+
+            gfx_ui_dial_rounded(6,slider1, -20, 20, 0, 0, 0.1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber_2("Gain", slider1, "%.1fdB      "));
+
+            gfx_ui_dial_rounded(7,slider2, -100, 100, 0, 0, 0.1);
+          ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+    control_start("main", "bitmap-simple", 0);
+
+    ui_screen() === "main" ? (
+      ui_split_topratio(2/3); // single row
+          ui_split_leftratio(1/2);
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Gain", slider1, "%.1f dB"));
+            gfx_ui_dial_rounded(6,slider1, -20, 20, 0, 0, 0.1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Pan", slider2, "%.1f"));
+            gfx_ui_dial_rounded(7,slider2, -100, 100, 0, 0, 0.1);
+          ui_pop();
+      ui_pop();
+      ui_split_topratio(1/4); // single row
+      ui_pop();
+      ui_split_topratio(2/3);
+        ui_split_leftratio(1/5);
+        ui_pop();
+        ui_split_leftratio(3/4);
+            gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber("", slider3, "Law"));
+            gfx_ui_slider_bar(slider3, -6, 6, 0, 0, 0.5);
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  dem_initial_gfx_width = 240;  // inital width in @gfx width height
+  dem_initial_gfx_height = 120;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;
+

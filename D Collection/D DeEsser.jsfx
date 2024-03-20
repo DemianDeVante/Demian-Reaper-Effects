@@ -1,0 +1,490 @@
+version:0.4.5beta
+desc:D DeEsser
+author:Stephen Boyes
+about:
+  # Auto DeEsser (beta)
+  Split the vocal signal into vowels and consonants
+changelog:
+  - beta v0.4.5
+
+slider2:thresh=0<-50,0,0.2>-consonant limit threshold (dB)
+slider20:que=3.0<1,5,0.1>-Q
+slider9:freq=6000<2000,10000>-Detector Freq
+
+slider1:gain_db=0<-40,2,0.2>-vowel gain (dB)
+slider3:con_gain_db=0<-40,2,0.2>-consonant gain (dB)
+
+slider4:con_chan=0<0,1,1{one and two,three and four}>-consonant channel
+
+slider10:mon_detector=0<0,1,1{Off,On}>-Monitor Detector
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+out_pin:left ess
+out_pin:right ess
+
+@init
+  freemem = ui_setup(1000000);
+  last_gain=10^(gain_db/20);
+  last_con_gain=10^(con_gain_db/20);
+  ext_tail_size = -1;
+  pdc_bot_ch=0;
+  pdc_top_ch=4;
+  pdc_delay=2;  
+  gr_meter=1;
+  gr_meter_decay = exp(1/(1*srate));
+
+  rms_sec = 0.3 * 0.001;
+  rms_Freq = 1/(2*$pi*rms_sec);
+  rms_coef = (rms_Freq/srate)/(1+(rms_Freq/srate));
+  rms_coef = 1-rms_coef;
+
+  a_time = 0.3;
+  att_sec = a_time * 0.001;
+  att_Freq = 1/(2*$pi*att_sec);
+  att_coef = (att_Freq/srate)/(1+(att_Freq/srate));
+  att_coef = 1-att_coef;
+
+  r_time = 3;
+  rel_sec = r_time * 0.001;
+  rel_Freq = 1/(2*$pi*rel_sec);
+  rel_coef = (rel_Freq/srate)/(1+(rel_Freq/srate));
+  rel_coef = 1-rel_coef;
+
+  smooth = 2^-18;
+  expand = 1;
+
+  function svf_highp(v0,cutoff,Q)
+  instance (ic1eq,ic2eq,v0,v1,v2,v3,a1,a2,a3,g,k,m0,m1,m2)
+  (
+  g = tan($pi*cutoff/srate);
+  k = 1/q;
+  a1 = 1/(1+g*(g+k));
+  a2 = g*a1;
+  a3 = g*a2;
+  m0 = 1;
+  m1 = -k;
+  m2 = -1;
+  v3 = v0-ic2eq;
+  v1 = a1*ic1eq+a2*v3;
+  v2 = ic2eq+a2*ic1eq+a3*v3;
+  ic1eq = 2*v1-ic1eq;
+  ic2eq = 2*v2-ic2eq;
+  m0*v0+m1*v1+m2*v2
+  );
+
+  function svf_lowp(v0,cutoff,Q)
+  instance (ic1eq,ic2eq,v0,v1,v2,v3,a1,a2,a3,g,k,mo,m1,m2)
+  (
+  g = tan($pi*cutoff/srate);
+  k = 1/Q;
+  a1 = 1/(1+g*(g+k));
+  a2 = g*a1;
+  a3 = g*a2;
+  m0 = 0;
+  m1 = 0;
+  m2 = 1;
+  v3 = v0-ic2eq;
+  v1 = a1*ic1eq+a2*v3;
+  v2 = ic2eq+a2*ic1eq+a3*v3;
+  ic1eq = 2*v1-ic1eq;
+  ic2eq = 2*v2-ic2eq;
+  m0*v0+m1*v1+m2*v2
+  );
+
+  rel_ms = 75;
+  rel = -1/(srate*0.001*rel_ms);
+  att_ms = 0.75;
+  att = 1/(srate*0.001*att_ms);
+
+  function slew_release(in0)
+  instance(in0,x,diff,out,out1)
+  (
+  x = in0-out1;  //difference from last sample
+  diff = min(max(x,rel),att);
+  out = max(min(out1+diff,1),0);
+  out1 = out;
+  out
+  );
+
+  function FIR(x,cx0,cx1,cx2,cx3,cx4)
+  instance(x0,x1,x2,x3,x4)
+  (
+  x4 = x3;
+  x3 = x2;
+  x2 = x1;
+  x1 = x0;
+  x0 = x;
+  cx0*x0 + cx1*x1 + cx2*x2 + cx3*x3 +cx4*x4
+  );
+
+  Fc = 900/srate;
+  a = exp(-2*$pi*Fc);
+  b = 1-a;
+
+  function lowpass(in,b)
+  instance(in,b,y)
+  (
+  y += b*(in-y);
+  y
+  );
+
+
+  ratio = 10;
+  slope = (1/ratio);
+  corner = 5;
+  function slider_update_function() (
+    	needs_slider_update = 0;
+    	//------ Previous @slider code
+      next_gain = 10^(gain_db/20);
+      next_con_gain = 10^(con_gain_db/20);
+
+      thresh_in = 1 / 10^(thresh/20);
+      thresh_out = 10^(thresh/20);
+    	//------ Previous @slider code
+  );
+
+@slider
+  slider_update_function();
+
+@block
+  d_gain = (next_gain - last_gain)/samplesblock;
+  d_con_gain = (next_con_gain - last_con_gain)/samplesblock;
+  needs_slider_update ? slider_update_function();
+
+@sample
+  ////////detect HF level////////
+  side_chain = 0.5*(spl0+spl1);
+  ESchain = sss.svf_highp(side_chain,freq,que);
+  ESlevel = sqrt(ess.svf_lowp(0.000000001+ESchain^2,520,0.5));
+
+  ////////detect average level////////
+  DThresh = (0.00001+side_chain^2);  //min threshold -50dB
+  DThresh = t.svf_lowp(DThresh,510,0.5);  //dynamic threshold
+  DThresh = sqrt(DThresh);
+
+  ////////calculate is sound consonant or vowel////////
+  consonant = 1/(1 + exp(-12*((ESlevel/DThresh)-1)));
+  cx0=0.5;  cx1=0.8663;  cx2=1;  cx3=0.8663;  cx4=0.5;
+  cxcx = cx0+cx1+cx2+cx3+cx4;
+  cx0 /= cxcx;  cx1 /= cxcx;  cx2 /= cxcx;  cx3 /= cxcx; cx4 /= cxcx;
+  consonant = fir.FIR(consonant,cx0,cx1,cx2,cx3,cx4);
+  consonant = con.lowpass(consonant,b);
+  consonant = slew.slew_release(consonant);
+  vowel = 1-consonant;
+
+  ////////split signal////////
+  cx0=cx1=cx2=cx3=cx4=0;  cx2=1;
+  spl0 = le.FIR(spl0,cx0,cx1,cx2,cx3,cx4);
+  spl1 = ri.FIR(spl1,cx0,cx1,cx2,cx3,cx4);
+  spl2 = consonant*spl0;
+  spl3 = consonant*spl1;
+  spl0 *= vowel;
+  spl1 *= vowel;
+
+  ////////shift some low into vowel////////
+  low0 = c0.lowpass(spl2,b);
+  low1 = c1.lowpass(spl3,b);
+  spl0 += low0;
+  spl1 += low1;
+  spl2 -= low0;
+  spl3 -= low1;
+
+
+  ////////limiter////////
+  //threshold
+  spl2 *= thresh_in;
+  spl3 *= thresh_in;
+
+  //RMS
+  square = (smooth+spl2^2+spl3^2)*0.5;
+  out = square + rms_coef*(out - square);
+  rms_out = SQRT(out);
+
+  //calculate envelope
+  env = rms_out + env_coef*(env - rms_out);
+  env_dB = 20*log10(env);
+  fuz = 1/(1+exp(-8*((last_env_dB/env_dB)-1)));
+  env_coef = fuz*att_coef + (1-fuz)*rel_coef;
+  last_env_dB = env_dB;
+
+  //calculate ratio and threshold
+  knee = 1 + 10^( ((expand-slope)/corner) * env_dB);
+  knee = expand * env_dB - corner*log10(knee);
+  gain_red_db = knee - env_dB;
+  gr = 10^(gain_red_db/20);
+  //gain reduction
+  spl2 *= gr;
+  spl3 *= gr;
+  spl2 *= thresh_out;
+  spl3 *= thresh_out;
+
+
+
+
+
+  ////////output gain////////
+  spl0 *= last_gain;
+  spl1 *= last_gain;
+  last_gain += d_gain;
+  spl2 *= last_con_gain;
+  spl3 *= last_con_gain;
+  last_con_gain += d_con_gain;
+
+
+  con_chan == 0 ? (
+    spl0 = spl0+spl2;  spl1 = spl1+spl3;  spl2 = 0;  spl3 = 0;
+  );
+  mon_detector == 1 ? spl0 = spl1 = ESchain;  //monitor side chain
+
+
+
+
+
+  gr = max(0.02,gr);
+  gr < gr_meter ? gr_meter=gr : ( gr_meter*=gr_meter_decay; gr_meter>1?gr_meter=1; );
+
+@gfx 240 120 // request horizontal/vertical heights (0 means dont care)
+
+  function custom_gfx_func(gfx_w, gfx_h, mouse_x, mouse_y) (
+    gr_meter < 0.001 ? gr_meter = 0.001; // max GR so if the audio processing stops it doesnt "stick"
+    gr_meter *= exp(1/30); gr_meter>1?gr_meter=1; // decay meter here so if the audio processing stops it doesnt "stick"
+    gfx_r=0.62; gfx_g=0.98; gfx_b=0.62; gfx_a=0.75;
+    
+    meter_bot=19;
+    meter_h=min(gfx_h,32);
+    xscale=gfx_w*20/meter_bot;
+
+    gfx_y=0;
+    gfx_x=gfx_w + log10(gr_meter)*xscale;
+    gfx_rectto(gfx_w,meter_h);
+
+    gfx_r=gfx_g=gfx_b=1.0; gfx_a=0.6;
+
+    s2=sqrt(2)/2;
+    g = s2;
+    while(
+      gfx_x=gfx_w + log10(g)*xscale;
+      gfx_x >= 0 ? 
+      (
+        gfx_y=0;
+        gfx_lineto(gfx_x,meter_h,0);
+        gfx_y=meter_h-gfx_texth;
+        gfx_x+=2;
+        gfx_drawnumber(log10(g)*20,0);
+        gfx_drawchar($'d');
+        gfx_drawchar($'B');
+      );
+      g*=s2;
+      gfx_x >=0;
+    );
+    gfx_a=1;
+
+    gfx_x=0; gfx_y=meter_h/2 - gfx_texth/2;
+    gfx_drawnumber(log10(gr_meter)*20,1);
+    gfx_drawchar($'d');
+    gfx_drawchar($'B');
+  );
+
+
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+      ui_split_leftratio(2/5);
+            gfx_ui_automate_slider(thresh, gfx_ui_layout_textnumber_down_title("Thres", thresh, "%.1f dB"));
+            gfx_ui_dial_rounded(7, thresh, -50, 0, -2, 0, 0.2);
+      ui_pop();
+      ui_split_leftratio(1/3);
+        ui_split_topratio(1/5);
+        ui_pop();
+        ui_split_topratio(3/4);
+            gfx_ui_automate_slider(que, gfx_ui_layout_textnumber_down_title("Q", que, "%.1f"));
+            gfx_ui_dial_rounded(9,que, 1, 5, log(5/1), 3.0, 0.1);
+        ui_pop();
+      ui_pop();
+      ui_split_leftratio(1);
+            gfx_ui_automate_slider(freq, gfx_ui_layout_textnumber_down_title("Freq", freq, "%.4f"));
+            gfx_ui_automate_slider(freq, control_dial(8,freq, 2000, 10000, log(10000/2000), 6000));
+      ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+    control_start("main", "bitmap-simple", 0);
+
+    ui_screen() === "main" ? (
+      ui_split_topratio(3/20);
+        // use off-screen buffer #64
+        gfx_dest = -1;
+        ui_retina(1);
+        gfx_setfont(0);
+        // set the size if needed
+        gfx_getimgdim(64, _ui_gen_gfx_w, _ui_gen_gfx_h);
+        _ui_gen_gfx_w != ui_width() || _ui_gen_gfx_h != ui_height() ? (
+          gfx_setimgdim(64, _ui_gen_gfx_w = ui_width(), _ui_gen_gfx_h = ui_height());
+        );
+        
+        // Draw custom graphics
+        custom_gfx_func(_ui_gen_gfx_w, _ui_gen_gfx_h, mouse_x - ui_left(), mouse_y - ui_top());
+        
+        gfx_dest = -1;
+        gfx_blit(64, 1, 0, 0, 0, _ui_gen_gfx_w, _ui_gen_gfx_h, ui_left(), ui_top(), _ui_gen_gfx_w, _ui_gen_gfx_h);
+        ui_font();
+      ui_pop();
+      ui_split_topratio(1/1); // single row
+        ui_split_leftratio(3/7);
+          // row 1, group 1
+          ui_split_leftratio(1/3);
+            gfx_ui_automate_slider(thresh, gfx_ui_layout_textnumber("Threshold", thresh, "%.1f dB"));
+            gfx_ui_dial_rounded(7,thresh, -50, 0, -2, 0, 0.2);
+          ui_split_next();
+            gfx_ui_automate_slider(que, gfx_ui_layout_textnumber("Q", que, "%.1f"));
+            gfx_ui_dial_rounded(9,que, 1, 5, log(5/1), 3.0, 0.1);
+          ui_split_next();
+            gfx_ui_automate_slider(freq, gfx_ui_layout_textnumber("Freq", freq, "%.2f"));
+            gfx_ui_automate_slider(freq, control_dial(8,freq, 2000, 10000, log(10000/2000), 6000));
+          ui_pop();
+        ui_pop();
+        ui_split_leftratio(2/4);
+          // row 1, group 2
+          control_group("Leveling");
+          ui_split_leftratio(1/2);
+            gfx_ui_automate_slider(gain_db, gfx_ui_layout_textnumber_down_title("Vowel", gain_db, "%.1f dB"));
+            gfx_ui_dial_rounded(7,gain_db, -40, 2, 0, 0, 0.2);
+          ui_split_next();
+            gfx_ui_automate_slider(con_gain_db, gfx_ui_layout_textnumber_down_title("Consonant", con_gain_db, "%.1f dB"));
+            gfx_ui_dial_rounded(7,con_gain_db, -40, 2, 0, 0, 0.2);
+          ui_pop();
+        ui_pop();
+        ui_split_leftratio(2/2);
+          // row 1, group 3
+          control_group("Settings");
+          ui_split_leftratio(1/2);
+            gfx_ui_layout_text("", con_chan ? "3-4" : "1-2");
+            ui_pad(-1, 0);
+            gfx_ui_automate_slider(con_chan, control_switch(con_chan));
+          ui_split_next();
+            gfx_ui_layout_text("", mon_detector ? "Monitor" : "In");
+            ui_pad(-1, 0);
+            gfx_ui_automate_slider(mon_detector, control_switch(mon_detector));
+          ui_pop();
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  dem_initial_gfx_width = 240;  // inital width in @gfx width height
+  dem_initial_gfx_height = 120;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;

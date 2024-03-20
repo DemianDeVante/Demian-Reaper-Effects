@@ -1,0 +1,355 @@
+// License: GPL - http://www.gnu.org/licenses/gpl.html
+// floaty (modulated delay)
+// by daniel arena (dan@remaincalm.org)
+// http://remaincalm.org
+// 2008/09/16 - first version! contact me with bugs etc
+// 2008/09/20 - updated: less glitching on overlap, tempo sync (backward compatible)
+// 2008/10/04 - updated: L/R offset
+// 2009/10/08 - updated: fixed bug where L/R offset active with playrate != 1, tweaked clamping behaviour (default = old behaviour)
+// 2009/10/09 - updated: fixed default clamp value
+
+desc: D Floaty Delay
+//tags: delay modulation mangler
+//author: remaincalm.org
+
+slider1:250<0,4000,1>-Delay (ms)
+slider2:40<0,100,1>-Mix (%)
+slider3:30<0,80,1>-Feedback (%)
+
+slider4:0.1<0,10,0.001>-Warp Rate (Hz)
+slider5:0.5<0,4,0.1>-Warp Amount (%)
+
+slider6:80<0,100,1>-Filter Cutoff (%)
+slider7:80<0,150,1>-Filter Resonance (%)
+
+slider8:1<-2,2,0.5>-Playback Rate
+
+slider9:0<0,64,1>Tempo Sync (32nd notes, 0 to disable)
+
+slider10:98<70,100,1>-L/R Offset (%)
+slider11:6<-12,12,0.1>-Pre-Filter Clamp (dB)
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+
+@init
+  freemem = ui_setup(1000000);
+  pi = 3.141592653589793;
+  old_delaysiz = -1; 
+  reset = 1;
+  clamp = 2; // ugly limiter (pre-filter)
+  target_clamp = clamp;
+  smooth_overlap = 128; // smooth out if rec/play csr overlap
+  function slider_update_function() (
+      needs_slider_update = 0;
+      //------ Previous @slider code
+      delaysiz = (slider1 * srate / 1000)|0;
+      bufsiz = delaysiz*4; //max(delaysiz, srate);
+      (delaysiz != old_delaysiz || slider8 != old_slider8 || slider4 != old_slider4 || slider10 != old_slider10 ) ?
+      (
+        play_csr = 0;
+        rec_csrL = delaysiz-2 ;
+        rec_csrR = (slider10 * rec_csrL / 100) | 0;
+        t = 0;
+        reset = 1;
+        old_delaysiz = delaysiz; 
+        old_slider8 = slider8;
+        old_slider4 = slider4;
+        old_slider10 = slider10;
+      );
+
+      rate = 2*pi*slider4/srate;
+
+      // RC filter params (hi/lo)
+      LPF_c = 0.5^(5-(slider6/25));
+      LPF_r = 0.5^((slider7/40)-0.6);
+      HPF_c = 0.5^4.8;
+      HPF_r = 0.5^(3-(slider7/40));
+
+      // update clamp value
+      target_clamp = 2 ^ (slider11/6);
+      //------ Previous @slider code
+  );
+
+@block
+  (slider9 > 0 && tempo > 0) ?
+  (
+    slider1 = 1000 * slider9 * 60/8/tempo;
+  );
+  needs_slider_update ? slider_update_function();
+
+@slider
+  slider_update_function()
+
+@sample
+
+  // move play head
+  lplay_csr = play_csr;
+  play_csr += (reset>0) ? slider8 : (slider8 + (slider5/100) * sin(t)); 
+  t+= (reset>0) ? 0 : rate;
+  reset = (play_csr >= bufsiz) ? 0 : reset; // allow one full record cycle before modulation
+  play_csr += (play_csr >= bufsiz) ? -bufsiz: 0;
+  play_csr += (play_csr < 0) ? bufsiz: 0;
+
+  play_csr_0 = 0|play_csr;
+  play_csr_1 = (play_csr_0+1 == bufsiz) ? 0 : play_csr_0+1;
+
+  // get from play head
+  frac0= play_csr - play_csr_0;
+  tmpL =  (buf[play_csr_0] * (1-frac0) + buf[play_csr_1] * (frac0));
+  tmpR =  (buf[play_csr_0+bufsiz] * (1-frac0) + buf[play_csr_1+bufsiz] * (frac0));
+
+  // clean up if play/rec overlapping
+  overlap_distL = abs((play_csr % bufsiz) - (rec_csrL % bufsiz));
+  overlap_multL = (overlap_distL >= smooth_overlap) ? 1 : overlap_distL/smooth_overlap;
+
+  overlap_distR = abs((play_csr % bufsiz) - (rec_csrR % bufsiz));
+  overlap_multR = (overlap_distR >= smooth_overlap) ? 1 : overlap_distR/smooth_overlap;
+
+  tmpL *= overlap_multL;
+  tmpR *= overlap_multR;
+
+  // clamp (before filter!)
+  // updated
+  (clamp != target_clamp) ? (clamp = 0.8 * clamp + 0.2 * target_clamp) ;
+  (abs(tmpL) > clamp) ? ( tmpL = (tmpL > 0) ? clamp : -clamp );
+  (abs(tmpR) > clamp) ? ( tmpR = (tmpR > 0) ? clamp : -clamp );
+
+
+  // run filter
+  (slider6 > 0 && slider7 > 0) ?
+  (
+    // new lpf
+    v0L = (1 - LPF_r*LPF_c)*v0L - LPF_c*v1L + LPF_c*tmpL;
+    v1L = (1 - LPF_r*LPF_c)*v1L + LPF_c*v0L;
+    tmpL = v1L;
+
+    // new hpf 
+    hv0L = (1 - HPF_r*HPF_c)*hv0L - HPF_c*hv1L + HPF_c*tmpL;
+    hv1L = (1 - HPF_r*HPF_c)*hv1L + HPF_c*hv0L;
+    tmpL -= hv1L;
+
+    // new lpf
+    v0R = (1 - LPF_r*LPF_c)*v0R - LPF_c*v1R + LPF_c*tmpR;
+    v1R = (1 - LPF_r*LPF_c)*v1R + LPF_c*v0R;
+    tmpR = v1R;
+
+    // new hpf 
+    hv0R = (1 - HPF_r*HPF_c)*hv0R - HPF_c*hv1R + HPF_c*tmpR;
+    hv1R = (1 - HPF_r*HPF_c)*hv1R + HPF_c*hv0R;
+    tmpR -= hv1R;
+  );
+
+  // store and feedback
+  buf[rec_csrL]= tmpL * slider3/100 + spl0;
+  buf[rec_csrR+bufsiz]= tmpR * slider3/100 + spl1;
+
+  // move rec head
+  rec_csrL += 1;
+  rec_csrL += (rec_csrL >= bufsiz) ? -bufsiz : 0;
+  rec_csrL += (rec_csrL < 0) ? bufsiz : 0;
+
+  rec_csrR += 1;
+  rec_csrR += (rec_csrR >= bufsiz) ? -bufsiz : 0;
+  rec_csrR += (rec_csrR < 0) ? bufsiz : 0;
+
+  // output
+  spl0 = tmpL*(slider2/100) + spl0*(1-(slider2/100));
+  spl1 = tmpR*(slider2/100) + spl1*(1-(slider2/100));
+
+
+@gfx 300 250
+
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+
+    ui_screen() === "main" ? (
+      ui_split_leftratio(2/5);
+        ui_split_topratio(1/2);
+          gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber_down_title("Delay", slider1, "%i ms"));
+          gfx_ui_dial_rounded(7,slider1, 0, 4000, 0, 250, 1);
+        ui_split_next();
+          gfx_ui_automate_slider(slider6, gfx_ui_layout_textnumber_down_title("Low", slider6, "%i %%"));
+          gfx_ui_dial_rounded(8,slider6, 0, 100, 0, 80, 1);
+        ui_pop();
+      ui_pop();
+      ui_split_leftratio(1/3);
+        ui_split_topratio(19/20);
+        ui_split_topratio(1/3);
+          gfx_ui_automate_slider(slider10, gfx_ui_layout_textnumber_down_title("L/R", slider10, "%i %%"));
+          gfx_ui_dial_rounded(9,slider10, 70, 100, log(100/70), 98, 1);
+        ui_split_next();
+          gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber_down_title("W", slider5, "%.1f %%"));
+          gfx_ui_dial_rounded(9,slider5, 0, 4, 0, 0.5, 0.1);
+        ui_split_next();
+          gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber_down_title("Mix", slider2, "%i %%"));
+          gfx_ui_dial_rounded(9,slider2, 0, 100, 0, 40, 1);
+        ui_pop();
+        ui_pop();
+      ui_pop();
+      ui_split_leftratio(1);
+        ui_split_topratio(1/2);
+          gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber_down_title("Feed", slider3, "%i %%"));
+          gfx_ui_dial_rounded(7,slider3, 0, 80, 0, 30, 1);
+        ui_split_next();
+          gfx_ui_automate_slider(slider7, gfx_ui_layout_textnumber_down_title("Res", slider7, "%i %%"));
+          gfx_ui_dial_rounded(8,slider7, 0, 150, 0, 80, 1);
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+    control_start("main", "bitmap-simple", 0);
+
+    ui_screen() === "main" ? (
+      ui_split_leftratio(2/5);
+        ui_split_topratio(1/2);
+          gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Delay", slider1, "%i ms"));
+          gfx_ui_dial_rounded(7,slider1, 0, 4000, 0, 250, 1);
+        ui_split_next();
+          gfx_ui_automate_slider(slider6, gfx_ui_layout_textnumber("Low", slider6, "%i %%"));
+          gfx_ui_dial_rounded(8,slider6, 0, 100, 0, 80, 1);
+        ui_pop();
+      ui_pop();
+      ui_split_leftratio(1/3);
+        ui_split_topratio(1/3);
+          gfx_ui_automate_slider(slider10, gfx_ui_layout_textnumber("L/R Offset", slider10, "%i %%"));
+          gfx_ui_dial_rounded(9,slider10, 70, 100, log(100/70), 98, 1);
+        ui_split_next();
+          gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber("Warp", slider5, "%.1f %%"));
+          gfx_ui_dial_rounded(9,slider5, 0, 4, 0, 0.5, 0.1);
+        ui_split_next();
+          gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Mix", slider2, "%i %%"));
+          gfx_ui_dial_rounded(9,slider2, 0, 100, 0, 40, 1);
+        ui_pop();
+      ui_pop();
+      ui_split_leftratio(1);
+        ui_split_topratio(1/2);
+          gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber("Feedback", slider3, "%i %%"));
+          gfx_ui_dial_rounded(7,slider3, 0, 80, 0, 30, 1);
+        ui_split_next();
+          gfx_ui_automate_slider(slider7, gfx_ui_layout_textnumber("Resonance", slider7, "%i %%"));
+          gfx_ui_dial_rounded(8,slider7, 0, 150, 0, 80, 1);
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  dem_initial_gfx_width = 300;  // inital width in @gfx width height
+  dem_initial_gfx_height = 250;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;

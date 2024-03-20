@@ -1,0 +1,343 @@
+NoIndex: true
+desc: D RCInflator
+author: chmaha, saike, rcjah
+about:
+  The "Oxford" setting clones the behavior of the Sonnox Oxford Inflator in every aspect including "bandsplit" mode. 
+  The "ideal" setting improves the behavior further by omitting the odd quirks found in the original Sonnox plug-in. 
+  DSP by lewloiwc
+  https://github.com/ReaTeam/JSFX/blob/master/Distortion/RCInflator2_Oxford.jsfx
+  https://github.com/ReaTeam/JSFX/blob/master/Distortion/RCInflator2_Ideal.jsfx
+  Both improve upon the original RCInflator (Oxford Edition) by RCJacH with additions by saike and chmaha.
+  https://github.com/ReaTeam/JSFX/blob/master/Distortion/rcjach_RCInflator.jsfx
+  For discussion see https://forum.cockos.com/showthread.php?t=256286.
+  This combined version released under GPLv3 license
+
+slider7:effect_in_slider=1<0,1,1{Off,On}>-Effect In
+
+slider1:setting=0<0,1,1{Oxford,Ideal}>Edition
+
+slider2:input_slider=0<-6,12,0.01>-Input (dB)
+slider3:effect_slider=0<0,100,0.1>-Effect (%)
+slider4:curve_slider=0<-50,50,0.1>-Curve
+slider5:clip_slider=1<0,1,1{Off,On}>-Clip 0 dB
+slider6:band_split_slider=0<0,1,1{Off,On}>-Band Split
+slider8:output_slider=0<-12,0,0.01>-Output (dB)
+
+
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:Input L
+in_pin:Input R
+out_pin:Output L
+out_pin:Output R
+
+
+
+@init //----------------------------------------------------------------
+
+	freemem = ui_setup(1000000);
+	
+	ext_nodenorm = 1;
+
+	function clamp(x,min,max)
+	(
+		x < min ? min : x > max ? max : x;
+	);
+
+	function SVFOP_set(cutoff)
+	(
+		this.c = tan($pi*(cutoff/srate - 0.25))*0.5 + 0.5;
+	);
+
+	function SVFOPlpf(x)
+	instance(
+		c,i
+	)
+	(
+		x = i + c*(x - i);
+		i = 2*x - i;
+		x;
+	);
+
+	function SVFOPhpf(x)
+	instance(
+		c,r,i
+	)
+	(
+		r = (1 - c)*i + c*x;
+		i = 2*r - i;
+		x - r;
+	);
+
+	function band_split_set(xA,xB)
+	(
+		//Low
+			this.A.SVFOP_set(xA);
+		//High
+			this.B.SVFOP_set(xB);
+		//Mid
+			this.gain = this.B.c*(1 - this.A.c)/(this.B.c - this.A.c);
+			this.gain_div = 1/this.gain;
+	);
+
+	function band_split(x)
+	(
+		//Low
+			this.L = this.A.SVFOPlpf(x);
+		//High
+			this.H = this.B.SVFOPhpf(x);
+		//Mid
+			this.M = x - this.L - this.H;
+	);
+
+	function waveshaper(x)
+	local(
+		y
+	)
+	(
+		(
+			(y = abs(x)) < 1 ? (
+				A*y + B*sqr(y) + C*y*sqr(y) - D*(sqr(y) - 2*sqr(y)*y + sqr(sqr(y)));
+			) :
+			y < 2 ? (
+				2*y - sqr(y);
+			)
+		)*wet*sign(x) + x*dry;
+	);
+
+	spl0.band_split_set(240,2400);
+	spl1.band_split_set(240,2400);
+
+	function slider_update_function() (
+			needs_slider_update = 0;
+			//------ Previous @slider code
+			pre = exp(input_slider*(log(10)*0.05));
+			post = exp(output_slider*(log(10)*0.05));
+
+			(setting == 0) ? wet = effect_slider*0.01*0.99999955296 : wet = effect_slider*0.01;
+
+			dry = 1 - effect_slider*0.01;
+
+			A = curve_slider*0.01 + 1.5;
+			B = curve_slider*-0.02;
+			C = curve_slider*0.01 - 0.5;
+			D = 0.0625 - curve_slider*0.0025 + sqr(curve_slider)*0.000025;
+			//------ Previous @slider code
+	);
+
+
+@slider //----------------------------------------------------------------
+	slider_update_function()
+
+
+@block
+  needs_slider_update ? slider_update_function();
+
+
+@sample //----------------------------------------------------------------
+
+	clip_slider ? (
+		spl0 = clamp(spl0*pre,-1,1);
+		spl1 = clamp(spl1*pre,-1,1);
+	) : (
+		spl0 = clamp(spl0*pre,-2,2);
+		spl1 = clamp(spl1*pre,-2,2);
+	);
+
+	effect_in_slider ? (
+		band_split_slider ? (
+			spl0.band_split(spl0);
+			spl1.band_split(spl1);
+
+			spl0 = waveshaper(spl0.L) + waveshaper(spl0.M*spl0.gain)*spl0.gain_div + waveshaper(spl0.H);
+			spl1 = waveshaper(spl1.L) + waveshaper(spl1.M*spl1.gain)*spl1.gain_div + waveshaper(spl1.H);
+		) : (
+			spl0 = waveshaper(spl0);
+			spl1 = waveshaper(spl1);
+		);
+	);
+
+	(setting == 0) ? (
+	abs(spl0) < 0.0000000000000000555111512312578270211815834045 ? spl0 = 0 : spl0 *= post;
+	abs(spl1) < 0.0000000000000000555111512312578270211815834045 ? spl1 = 0 : spl1 *= post;
+	) : (
+	spl0 *= post;
+	spl1 *= post;
+	);
+
+
+@gfx 240 120
+
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+	ui_split_topratio(19/20);
+      ui_split_leftratio(3/8);
+					gfx_ui_automate_slider(effect_slider, gfx_ui_layout_textnumber_down_title("Effect", effect_slider, "%.1f %%"));
+					gfx_ui_dial_rounded(6,effect_slider, 0, 100, 2, 0, 0.1);
+      ui_pop();
+      ui_split_leftratio(3/5);
+					gfx_ui_automate_slider(curve_slider, gfx_ui_layout_textnumber_down_title("Curve", curve_slider, "%.1f"));
+					gfx_ui_dial_rounded(7,curve_slider, -50, 50, 0, 0, 0.1);
+      ui_pop();
+      ui_split_leftratio(1);
+        ui_split_topratio(1/2);
+					gfx_ui_automate_slider(input_slider, gfx_ui_layout_textnumber_down_title("in", input_slider, "%.2f dB"));
+					gfx_ui_dial_rounded(9,input_slider, -6, 12, 0, 0, 0.01);
+        ui_pop();
+        ui_split_topratio(20/20);
+					gfx_ui_automate_slider(output_slider, gfx_ui_layout_textnumber_down_title("out", output_slider, "%.2f dB"));
+					gfx_ui_dial_rounded(9,output_slider, -12, 0, -2, 0, 0.01);
+        ui_pop();
+      ui_pop();
+	ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+	control_start("main", "bitmap-simple", 0);
+	ui_screen() === "main" ? (
+		ui_split_topratio(1/1); // single row
+			ui_split_leftratio(6/6);
+				// row 1, group 1
+				ui_split_leftratio(1/5);
+					gfx_ui_automate_slider(input_slider, gfx_ui_layout_textnumber("Input", input_slider, "%.2f dB"));
+					gfx_ui_dial_rounded(9,input_slider, -6, 12, 0, 0, 0.01);
+				ui_split_next();
+					gfx_ui_automate_slider(effect_slider, gfx_ui_layout_textnumber("Effect", effect_slider, "%.1f %%"));
+					gfx_ui_dial_rounded(6,effect_slider, 0, 100, 2, 0, 0.1);
+				ui_split_next();
+					gfx_ui_automate_slider(curve_slider, gfx_ui_layout_textnumber("Curve", curve_slider, "%.1f"));
+					gfx_ui_dial_rounded(7,curve_slider, -50, 50, 0, 0, 0.1);
+				ui_split_next();
+					ui_split_topratio(1/2);
+						gfx_ui_layout_text("Clip 0 dB", clip_slider ? "On" : "Off");
+						ui_pad(-1, 0);
+						gfx_ui_automate_slider(clip_slider, control_switch(clip_slider));
+					ui_split_next();
+						gfx_ui_layout_text("Band Split", band_split_slider ? "On" : "Off");
+						ui_pad(-1, 0);
+						gfx_ui_automate_slider(band_split_slider, control_switch(band_split_slider));
+					ui_pop();
+				ui_split_next();
+					gfx_ui_automate_slider(output_slider, gfx_ui_layout_textnumber("Output", output_slider, "%.2f dB"));
+					gfx_ui_dial_rounded(9,output_slider, -12, 0, -2, 0, 0.01);
+				ui_pop();
+			ui_pop();
+		ui_pop();
+	) : control_system();
+  );
+
+  dem_initial_gfx_width = 240;  // inital width in @gfx width height
+  dem_initial_gfx_height = 120;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;
+

@@ -1,0 +1,249 @@
+// This effect Copyright (C) 2007 and later Thomas Scott Stillwell
+// Based on mdctfilter Copyright 2004 and later by Cockos Incorporated
+// License: GPL - http://www.gnu.org/licenses/gpl.html
+// 
+
+desc: D Thunderkick
+//tags: processing generator filter synthesis
+//author: Stillwell
+
+slider1:-6<-40,40,0.1>-Effect (dB)
+slider2:4<1,30,1>-Cutoff
+slider3:0<-40,40,0.1>-Gain (dB)
+slider4:1<0,10,1>-Shift
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+
+@init
+  freemem = ui_setup(1000000);
+  fftsize=1024;
+  ext_tail_size = fftsize*8;
+  bucketsize = (srate * 0.5 ) / fftsize;
+  bufpos=bi1=0; 
+  bi2=fftsize*2; 
+  halfsize=fftsize*0.5;
+  bands = slider2;
+  gain = 2 ^ (slider3 / 6);
+  shift = slider4;
+  function slider_update_function() (
+    	needs_slider_update = 0;
+    	//------ Previous @slider code
+      adj=2 ^ (slider1/6);
+      bands = slider2;
+      gain = 2 ^ (slider3 / 6);
+      shift = (slider4 < slider2 ? slider4 : slider2);
+      slider4 = shift;
+    	//------ Previous @slider code
+  );
+
+@slider
+  slider_update_function();
+
+@block
+  needs_slider_update ? slider_update_function();
+
+@sample
+  // bi2 was the previously transformed buffer, and by the time it
+  // is bi2 we only touch the second half (the first was replaced when
+  // it was bi1)
+
+  // bi1 is the most recently transformed buffer, we only touch the first
+  // half, because the second will be used for the next overlap
+
+
+  dry0=spl0;
+  dry1=spl1;
+  wet0=spl0+spl1;
+
+  t=bi1+bufpos;
+  p0=t[0];
+  t[0]=wet0;
+
+  t=bi2+halfsize+bufpos;
+  p1=t[0];
+  t[0]=wet0;
+
+  wet0 = p0 + p1; // our mdct handles windowing, so we just add
+
+  bufpos+=1;
+
+  bufpos >= halfsize ? (
+    // we hit our FFT size here
+    // swap bi1 and bi2
+    t=bi1; bi1=bi2; bi2=t;
+    // Map time -> frequency domain
+    mdct(bi1,fftsize);
+    // frequency-shift energy to lower bands
+    // memcpy(bi1,bi1+shift,bands);
+    i=0;
+    loop(bands, bi1[i]=bi1[i*shift+i]; i+=1;);
+    // zero out HF bands;
+    memset(bi1+bands,0,fftsize-bands);
+    imdct(bi1,fftsize);
+    bufpos=0;
+  );
+
+
+  spl0 = (dry0 + wet0 * adj) * gain;
+  spl1 = (dry1 + wet0 * adj) * gain;
+
+@gfx 240 120
+
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+      ui_split_leftratio(2/5);
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Drive", slider1, "%.1f dB"));
+            gfx_ui_dial_rounded(6,slider1, -40, 40, 0, -6, 0.1);
+      ui_pop();
+      ui_split_leftratio(1/3);
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Cut", slider2, "%i"));
+            gfx_ui_dial_rounded(9,slider2, 1, 30, log(30/1), 4, 1);
+      ui_pop();
+      ui_split_leftratio(1);
+            gfx_ui_automate_slider(slider4, gfx_ui_layout_textnumber("Shift", slider4, "%i"));
+            gfx_ui_dial_rounded(7,slider4, 0, 10, 0, 1, 1);
+      ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+      ui_split_topratio(1/1); // single row
+        ui_split_leftratio(4/4);
+          // row 1, group 1
+          ui_split_leftratio(1/4);
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Effect", slider1, "%.1f dB"));
+            gfx_ui_dial_rounded(6,slider1, -40, 40, 0, -6, 0.1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Cutoff", slider2, "%i"));
+            gfx_ui_dial_rounded(9,slider2, 1, 30, log(30/1), 4, 1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider4, gfx_ui_layout_textnumber("Shift", slider4, "%i"));
+            gfx_ui_dial_rounded(7,slider4, 0, 10, 0, 1, 1);
+          ui_split_next();
+            gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber("Gain", slider3, "%.1f dB"));
+            gfx_ui_dial_rounded(8,slider3, -40, 40, 0, 0, 0.1);
+          ui_pop();
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  dem_initial_gfx_width = 240;  // inital width in @gfx width height
+  dem_initial_gfx_height = 120;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;

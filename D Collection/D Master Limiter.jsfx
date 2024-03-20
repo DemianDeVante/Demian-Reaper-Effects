@@ -1,0 +1,269 @@
+// (C) 2006, Michael Gruhn.
+
+// NO WARRANTY IS GRANTED. THIS PLUG-IN IS PROVIDED ON AN "AS IS" BASIS, WITHOUT
+// WARRANTY OF ANY KIND. NO LIABILITY IS GRANTED, INCLUDING, BUT NOT LIMITED TO,
+// ANY DIRECT OR INDIRECT,  SPECIAL,  INCIDENTAL OR CONSEQUENTIAL DAMAGE ARISING
+// OUT OF  THE  USE  OR INABILITY  TO  USE  THIS PLUG-IN,  COMPUTER FAILTURE  OF
+// MALFUNCTION INCLUDED.  THE USE OF THE SOURCE CODE,  EITHER  PARTIALLY  OR  IN
+// TOTAL, IS ONLY GRANTED,  IF USED IN THE SENSE OF THE AUTHOR'S INTENTION,  AND
+// USED WITH ACKNOWLEDGEMENT OF THE AUTHOR. FURTHERMORE IS THIS PLUG-IN A  THIRD
+// PARTY CONTRIBUTION,  EVEN IF INCLUDED IN REAPER(TM),  COCKOS INCORPORATED  OR
+// ITS AFFILIATES HAVE NOTHING TO DO WITH IT.  LAST BUT NOT LEAST, BY USING THIS
+// PLUG-IN YOU RELINQUISH YOUR CLAIM TO SUE IT'S AUTHOR, AS WELL AS THE CLAIM TO
+// ENTRUST SOMEBODY ELSE WITH DOING SO.
+
+
+desc:D Master Limiter
+//tags: dynamics limiter
+//author: LOSER
+
+slider1:-3<-20,-.1,.1>-Threshold (dB)
+slider2:200<0,1000,1>-Look Ahead (�s)
+slider3:100<0,1000,1>-Attack (�s)
+slider4:0<0,10,.1>-Hold (ms)
+slider5:250<0,1000,1>-Release (ms)
+slider6:-.1<-6,0,.01>-Limit (dB)
+slider7:0<-20,0,1>-Reduction
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+
+@init
+  freemem = ui_setup(1000000);
+	ext_tail_size=-1;
+	ext_gr_meter = 0;
+	gain = seekgain = 1;
+	c_ampdB = 8.65617025;
+	function slider_update_function() (
+			needs_slider_update = 0;
+			//------ Previous @slider code
+			treshdB = min(slider1,-.1);
+			tresh = exp(treshdB/c_ampdB);
+
+			treshdB == -.1 ? (gain = seekgain = 1; );
+
+			look = floor(max( min( slider2/1000000*srate , 500000) , 1));
+			attack = exp( -treshdB/max( slider3/1000000*srate , 0) / c_ampdB  ) ;
+			hold = slider4/1000*srate;
+			under_tresh = 0;
+			release = exp( -treshdB/max( slider5/1000*srate , 0) / c_ampdB ) ;
+
+			limit = exp(slider6/c_ampdB);
+
+			mode_make_up = 1;
+
+			volume = limit / (mode_make_up ? tresh : 1);
+
+			seekgain = 1;
+			//------ Previous @slider code
+	);
+@slider
+	slider_update_function()
+
+@block
+  needs_slider_update ? slider_update_function();
+
+@sample
+	detect = max(abs(spl0),abs(spl1));
+
+	bufPos[0] = spl0;
+	bufPos[look] = spl1;
+	(bufPos += 1) >= look ? bufPos = 0 ;
+	spl0 = bufPos[0];
+	spl1 = bufPos[look];
+
+	// Prevent From Preopening, I Know There Might Be Transients In Between, But Fuck'Em :/
+	detect = max(max(abs(spl0),abs(spl1)),detect);
+
+	detect > tresh ? (
+		under_tresh = 0;
+		hold ? seekgain = min( tresh/detect ,seekgain ) : seekgain = tresh/detect;
+	):(
+		(under_tresh+=1)>hold ? (seekgain = 1; );
+	);
+
+	gain > seekgain ? gain=max(gain/attack,seekgain):gain=min(gain*release,seekgain);
+
+	spl0 *= gain * volume;
+	spl1 *= gain * volume;
+
+	// Prevent From Unecessary Distortion, Better Distort Just Once Even Tho Hard :)
+	max(abs(spl0),abs(spl1)) > limit ? gain = seekgain; // Uber Nifty Metering For This Doesn't Work :(
+
+	spl0 = max(min(spl0,limit),-limit);
+	spl1 = max(min(spl1,limit),-limit); 
+
+	ext_gr_meter = slider7 = log(gain)*c_ampdB;
+	sliderchange(64);
+
+@gfx 240 120
+
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+      ui_split_leftratio(3/8);
+					gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber_down_title("Thres", slider1, "%.1f dB"));
+					gfx_ui_dial_rounded(7,slider1, -20, -.1, 0, -3, .1);
+      ui_pop();
+      ui_split_leftratio(3/5);
+					gfx_ui_automate_slider(slider6, gfx_ui_layout_textnumber_down_title("Ceil", slider6, "%.2f dB"));
+					gfx_ui_dial_rounded(8,slider6, -6, 0, -2, -.1, .01);
+      ui_pop();
+      ui_split_leftratio(1);
+        ui_split_topratio(2/5);
+					gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber_clear("Attack", slider3, "%i �s"));
+					gfx_ui_dial_rounded(9,slider3, 0, 1000, 0, 100, 1);
+        ui_pop();
+        ui_split_topratio(19/20);
+					gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber_down_title("Rel", slider5, "%i ms"));
+					gfx_ui_dial_rounded(9,slider5, 0, 1000, 0, 250, 1);
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+    control_start("main", "bitmap-simple", 0);
+	ui_screen() === "main" ? (
+		ui_split_topratio(1/1); // single row
+			ui_split_leftratio(6/6);
+				// row 1, group 1
+				ui_split_leftratio(1/6);
+					gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Threshold", slider1, "%.1f dB"));
+					gfx_ui_dial_rounded(7,slider1, -20, -.1, 0, -3, .1);
+				ui_split_next();
+					gfx_ui_automate_slider(slider6, gfx_ui_layout_textnumber("Limit", slider6, "%.2f dB"));
+					gfx_ui_dial_rounded(8,slider6, -6, 0, -2, -.1, .01);
+				ui_split_next();
+					gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber("Attack", slider3, "%i us"));
+					gfx_ui_dial_rounded(9,slider3, 0, 1000, 0, 100, 1);
+				ui_split_next();
+					gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber("Release", slider5, "%i ms"));
+					gfx_ui_dial_rounded(9,slider5, 0, 1000, 0, 250, 1);
+				ui_split_next();
+					gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Look Ahead", slider2, "%i us"));
+					gfx_ui_dial_rounded(9,slider2, 0, 1000, 0, 200, 1);
+				ui_split_next();
+					gfx_ui_automate_slider(slider4, gfx_ui_layout_textnumber("Hold", slider4, "%.1f ms"));
+					gfx_ui_dial_rounded(9,slider4, 0, 10, 0, 0, .1);
+				ui_pop();
+			ui_pop();
+		ui_pop();
+	) : control_system();
+  );
+
+  dem_initial_gfx_width = 240;  // inital width in @gfx width height
+  dem_initial_gfx_height = 120;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;

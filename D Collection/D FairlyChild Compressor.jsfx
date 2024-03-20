@@ -1,0 +1,331 @@
+// Copyright 2006, Thomas Scott Stillwell
+// All rights reserved.
+//
+//Redistribution and use in source and binary forms, with or without modification, are permitted 
+//provided that the following conditions are met:
+//
+//Redistributions of source code must retain the above copyright notice, this list of conditions 
+//and the following disclaimer. 
+//
+//Redistributions in binary form must reproduce the above copyright notice, this list of conditions 
+//and the following disclaimer in the documentation and/or other materials provided with the distribution. 
+//
+//The name of Thomas Scott Stillwell may not be used to endorse or 
+//promote products derived from this software without specific prior written permission. 
+//
+//THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR 
+//IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND 
+//FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS 
+//BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
+//(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR 
+//PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, 
+//STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
+//THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+desc:D FairlyChild Compressor
+//tags: dynamics compressor limiter
+//author: Stillwell
+
+slider1:0<-60,0,0.1>-Threshold (dB)
+slider2:70<0.1,100,1>-Bias
+slider3:0<-30,30,0.1>-Makeup Gain
+slider4:2<0,3,1{Left/Right (Blown Capacitor),Lat/Vert (Blown Capacitor),Left/Right,Lat/Vert}>-AGC
+slider5:1<1,6,1>-Time Constant
+slider6:100<1,10000,1>-Level Detector RMS Window
+slider7:1<1,50,0.1>-Current Compression Ratio
+slider8:0<-90,0,0.1>-Gain Reduction
+
+import ui-lib.jsfx-inc
+filename:0,themes/bitmap-simple/theme-cyan.png
+needs_slider_update
+
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+
+@init
+  freemem = ui_setup(1000000);
+  ext_tail_size = -1;
+  ext_gr_meter = 0;
+  log2db = 8.6858896380650365530225783783321; // 20 / ln(10)
+  db2log = 0.11512925464970228420089957273422; // ln(10) / 20 
+  i=0;
+  attime=0.0002; //200us
+  reltime=0.300; //300ms
+  rmstime=0.000050; //50us
+  maxover=0;
+  ratio=0;
+  cratio=0;
+  rundb=0;
+  overdb=0;
+  maxover=0;
+  atcoef=exp(-1/(attime * srate));
+  relcoef=exp(-1/(reltime * srate));
+  rmscoef=exp(-1/(rmstime * srate));
+  leftright = 0;
+  latvert = 1;
+  function slider_update_function() (
+    	needs_slider_update = 0;
+    	//------ Previous @slider code
+      thresh = slider1;
+      threshv = exp(thresh * db2log);
+      ratio = 20;
+      bias = 80 * slider2 / 100;
+      cthresh = thresh - bias;
+      cthreshv = exp(cthresh * db2log);
+      makeup = slider3;
+      makeupv = exp(makeup * db2log);
+      agc = slider4&1;
+      capsc = (slider4&2) ? log2db : log2db*2.08136898;
+      timeconstant = slider5;
+      timeconstant == 1 ? (
+        attime = 0.0002;
+        reltime = 0.300;
+      );
+      timeconstant == 2 ? (
+        attime = 0.0002;
+        reltime = 0.800;
+      );
+      timeconstant == 3 ? (
+        attime = 0.0004;
+        reltime = 2.000;
+      );
+      timeconstant == 4 ? (
+        attime = 0.0008;
+        reltime = 5.000;
+      );
+      timeconstant == 5 ? (
+        attime = 0.0002;
+        reltime = 10.000;
+      );
+      timeconstant == 6 ? (
+        attime = 0.0004;
+        reltime = 25.000;
+      );
+      atcoef = exp(-1 / (attime * srate));
+      relcoef = exp(-1 / (reltime * srate));
+      
+      rmstime = slider6 / 1000000; 
+      rmscoef=exp(-1/(rmstime * srate));
+    	//------ Previous @slider code
+  );
+
+@slider
+  slider_update_function()
+
+@block
+  needs_slider_update ? slider_update_function();
+
+@sample
+  agc == leftright ? (
+    aspl0 = abs(spl0);
+    aspl1 = abs(spl1);
+  ) : (  
+    aspl0 = abs(spl0+spl1)/2;
+    aspl1 = abs(spl0-spl1)/2;
+  );
+
+  maxspl = max(aspl0, aspl1);
+  maxspl = maxspl * maxspl;
+
+  runave = maxspl + rmscoef * (runave - maxspl);
+  det = sqrt(max(0,runave));
+
+  overdb = capsc * log(det/threshv);
+  overdb = max(0,overdb);
+
+  overdb > rundb ? (
+    rundb = overdb + atcoef * (rundb - overdb);
+  ) : (
+    rundb = overdb + relcoef * (rundb - overdb);
+  );
+  overdb = max(rundb,0);
+
+  bias == 0 ? (
+    cratio = ratio;
+  ) : (
+    cratio = 1 + (ratio-1) * sqrt((overdb + dcoffset) / (bias + dcoffset));
+  );
+  slider7 = cratio;
+  
+  ext_gr_meter = gr = -overdb * (cratio-1)/cratio;
+  slider8 = -gr;
+  grv = exp(gr * db2log);
+  
+  agc == leftright ? (
+    spl0 *= grv * makeupv;
+    spl1 *= grv * makeupv;
+  ) : (
+    sav0 = (spl0 + spl1) * grv;
+    sav1 = (spl0 - spl1) * grv;
+    spl0 = makeupv * (sav0 + sav1) * 0.5;
+    spl1 = makeupv * (sav0 - sav1) * 0.5;
+  );
+
+@gfx 240 120
+
+  function dem_min_ui_size(dem_min_ui_width, dem_min_ui_height) (
+    (gfx_h <= dem_min_ui_height) ? (
+      ui_push_rect(0,0,gfx_w,dem_min_ui_height);
+      gfx_h = dem_min_ui_height
+    );
+  );
+
+  function gfx_ui_automate_slider(slidervar*, new_value) (
+    slidervar !== new_value ? (
+      slidervar = new_value;
+      slider_automate(slidervar);
+    );
+    new_value;
+  );
+
+  function gfx_ui_layout_textnumber(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_up_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_title(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      ui_text(title);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_down_value(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_bottom(h);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    ui_pop();
+    value;
+  );
+
+  function gfx_ui_layout_textnumber_clear(title, value, format) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+      value = control_hidden_textnumber(value, value*1.00000001, format);
+    value;
+  );
+
+  function gfx_ui_dial_rounded(dem_theme, slidervar*, low, high, bias, default, step) (
+    slidervar != floor(slidervar._ui_gen_float/step + 0.5)*step ? slidervar._ui_gen_float = slidervar;
+    slidervar._ui_gen_float = control_dial(dem_theme, slidervar._ui_gen_float, low, high, bias, default);
+    gfx_ui_automate_slider(slidervar, floor(slidervar._ui_gen_float/step + 0.5)*step);
+  );
+
+  function gfx_ui_layout_text(title, text) local(h) (
+    h = max((ui_height() - 60)/2, ui_height()*0.2);
+    ui_split_top(h);
+      ui_text(title);
+    ui_pop();
+    ui_split_bottom(h);
+      ui_text(text);
+    ui_pop();
+  );
+
+  function gfx_ui_layout_title(title) (
+    gfx_ui_layout_text(title, "");
+  );
+
+  function gfx_ui_radio_option(value, optionValue, optionText) (
+    ui_align(0.1, 0.5);
+    ui_split_left(30);
+      value = control_radio(value, optionValue);
+    ui_pop();
+    ui_click() ? value = optionValue;
+    ui_text(optionText);
+    value;
+  );
+
+  function dem_mcp_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+      ui_split_leftratio(3/8);
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber_down_title("Thres", slider1, "%.1f dB"));
+            gfx_ui_dial_rounded(7,slider1, -60, 0, -2, 0, 0.1);
+      ui_pop();
+      ui_split_leftratio(3/5);
+            gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber_down_title("Gain", slider3, "%.1f dB"));
+            gfx_ui_dial_rounded(6,slider3, -30, 30, 0, 0, 0.1);
+      ui_pop();
+      ui_split_leftratio(1);
+        ui_split_topratio(2/5);
+            //gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber_clear("Bias", slider2, "%.1f"));
+            gfx_ui_automate_slider(slider2, slider2);
+            gfx_ui_dial_rounded(9,slider2, 0.1, 100, log(100/0.1), 70, 1);
+        ui_pop();
+        ui_split_topratio(19/20);
+            gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber_down_value("Time", slider5, sprintf(#,"%s",dem_speed)));
+            gfx_ui_dial_rounded(9,slider5, 1, 6, 0, 1, 1);
+        ui_pop();
+      ui_pop();
+    ) : control_system();
+  );
+
+  function dem_full_ui() (
+    control_start("main", "bitmap-simple", 0);
+    ui_screen() === "main" ? (
+      ui_split_leftratio(1/4);
+            gfx_ui_automate_slider(slider1, gfx_ui_layout_textnumber("Thres", slider1, "%.1f dB"));
+            gfx_ui_dial_rounded(7,slider1, -60, 0, -2, 0, 0.1);
+      ui_split_next();
+            gfx_ui_automate_slider(slider3, gfx_ui_layout_textnumber("Gain", slider3, "%.1f dB"));
+            gfx_ui_dial_rounded(6,slider3, -30, 30, 0, 0, 0.1);
+      ui_split_next();
+            gfx_ui_automate_slider(slider2, gfx_ui_layout_textnumber("Bias", slider2, "%.1f"));
+            //gfx_ui_automate_slider(slider2, slider2);
+            gfx_ui_dial_rounded(9,slider2, 0.1, 100, log(100/0.1), 70, 1);
+      ui_split_next();
+            gfx_ui_automate_slider(slider5, gfx_ui_layout_textnumber("Time", slider5, sprintf(#,"%s",dem_speed)));
+            gfx_ui_dial_rounded(9,slider5, 1, 6, 0, 1, 1);
+      ui_pop();
+    ) : control_system();
+  );
+
+  dem_initial_gfx_width = 240;  // inital width in @gfx width height
+  dem_initial_gfx_height = 120;  // inital height in @gfx width height
+  dem_max_mcp_width = 120;   // maximum embedded width
+  dem_max_mcp_height = (gfx_w *(dem_initial_gfx_height/dem_initial_gfx_width)); // keep ratio
+
+  slider5 == 6 ? dem_speed =   "sloth";
+  slider5 == 5 ? dem_speed =   "slow";
+  slider5 == 4 ? dem_speed =   "slow";
+  slider5 == 3 ? dem_speed =   "fast";
+  slider5 == 2 ? dem_speed =   "brisk";
+  slider5 == 1 ? dem_speed =   "turbo";
+
+
+  gfx_w <= dem_max_mcp_width ? (
+    uix_default_fontsize = 7;
+    dem_min_ui_size(dem_max_mcp_width, dem_max_mcp_height);
+    dem_mcp_ui();
+
+  ) : (
+    uix_default_fontsize = 12;
+    //dem_min_ui_size(121, 121);
+    dem_full_ui();
+  );
+
+  ui_interacted() ? needs_slider_update = 1;

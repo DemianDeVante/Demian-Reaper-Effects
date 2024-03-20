@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<index version="1" name="Demian D" commit="e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d">
+  <category name="D Collection">
+    <reapack name="AD Collection.jsfx" type="effect" desc="D Embedded Collection">
+      <version name="1" author="Demian D" time="2024-03-20T09:47:01Z">
+        <source>https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/AD%20Collection.jsfx</source>
+        <source file="D 1175 Compressor.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%201175%20Compressor.jsfx</source>
+        <source file="D Analog Summing.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Analog%20Summing.jsfx</source>
+        <source file="D Avocado Glitch.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Avocado%20Glitch.jsfx</source>
+        <source file="D DeEsser.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20DeEsser.jsfx</source>
+        <source file="D Distortion.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Distortion.jsfx</source>
+        <source file="D Event Horizon Clipper.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Event%20Horizon%20Clipper.jsfx</source>
+        <source file="D FairlyChild Compressor.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20FairlyChild%20Compressor.jsfx</source>
+        <source file="D Floaty Delay.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Floaty%20Delay.jsfx</source>
+        <source file="D Gain Panning.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Gain%20Panning.jsfx</source>
+        <source file="D Gate.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Gate.jsfx</source>
+        <source file="D Huge Booty Bass.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Huge%20Booty%20Bass.jsfx</source>
+        <source file="D Louderizer.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Louderizer.jsfx</source>
+        <source file="D Master Limiter.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Master%20Limiter.jsfx</source>
+        <source file="D MGA Limiter.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20MGA%20Limiter.jsfx</source>
+        <source file="D Ozzifier.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Ozzifier.jsfx</source>
+        <source file="D P3B EQ.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20P3B%20EQ.jsfx</source>
+        <source file="D Ping Pong Pan.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Ping%20Pong%20Pan.jsfx</source>
+        <source file="D Quick Delay.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Quick%20Delay.jsfx</source>
+        <source file="D RBJ EQ.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20RBJ%20EQ.jsfx</source>
+        <source file="D RBJ Highpass Lowpass.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20RBJ%20Highpass%20Lowpass.jsfx</source>
+        <source file="D RC Inflator.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20RC%20Inflator.jsfx</source>
+        <source file="D Reverb Hall.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Reverb%20Hall.jsfx</source>
+        <source file="D Reverb Plate.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Reverb%20Plate.jsfx</source>
+        <source file="D Reverb Room.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Reverb%20Room.jsfx</source>
+        <source file="D Saturation.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Saturation.jsfx</source>
+        <source file="D Smooth Limiter.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Smooth%20Limiter.jsfx</source>
+        <source file="D Stereoizer.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Stereoizer.jsfx</source>
+        <source file="D Thunderkick.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Thunderkick.jsfx</source>
+        <source file="D Tom Compressor.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Tom%20Compressor.jsfx</source>
+        <source file="D Transpire.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Transpire.jsfx</source>
+        <source file="D Ugly Pitch Shifter.jsfx">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/D%20Ugly%20Pitch%20Shifter.jsfx</source>
+        <source file="ui-lib.jsfx-inc">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/ui-lib.jsfx-inc</source>
+        <source file="qd.delay.jsfx-inc">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/qd.delay.jsfx-inc</source>
+        <source file="delay-utils.jsfx-inc">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/delay-utils.jsfx-inc</source>
+        <source file="qd.rbj_filter.jsfx-inc">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/qd.rbj_filter.jsfx-inc</source>
+        <source file="pitch-detection.jsfx-inc">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/pitch-detection.jsfx-inc</source>
+        <source file="qd.saike_pitchlib.jsfx-inc">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/qd.saike_pitchlib.jsfx-inc</source>
+        <source file="img/background.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/background.png</source>
+        <source file="img/button_eq_in.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/button_eq_in.png</source>
+        <source file="img/knob_eq_on.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/knob_eq_on.png</source>
+        <source file="img/knob_high_atten.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/knob_high_atten.png</source>
+        <source file="img/knob_high_atten_kcs.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/knob_high_atten_kcs.png</source>
+        <source file="img/knob_high_boost.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/knob_high_boost.png</source>
+        <source file="img/knob_high_boost_bandwidth.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/knob_high_boost_bandwidth.png</source>
+        <source file="img/knob_high_boost_kcs.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/knob_high_boost_kcs.png</source>
+        <source file="img/knob_low_atten.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/knob_low_atten.png</source>
+        <source file="img/knob_low_boost.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/knob_low_boost.png</source>
+        <source file="img/knob_low_cps.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/knob_low_cps.png</source>
+        <source file="img/knob_trim.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/knob_trim.png</source>
+        <source file="img/lamp_eq_on.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/lamp_eq_on.png</source>
+        <source file="img/menu.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/img/menu.png</source>
+        <source file="transpire_gfx/bg.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/transpire_gfx/bg.png</source>
+        <source file="transpire_gfx/clip.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/transpire_gfx/clip.png</source>
+        <source file="transpire_gfx/credits.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/transpire_gfx/credits.png</source>
+        <source file="transpire_gfx/knob_1.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/transpire_gfx/knob_1.png</source>
+        <source file="transpire_gfx/knob_2.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/transpire_gfx/knob_2.png</source>
+        <source file="transpire_gfx/knob_3.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/transpire_gfx/knob_3.png</source>
+        <source file="transpire_gfx/knob_4.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/transpire_gfx/knob_4.png</source>
+        <source file="themes/bitmap-simple/theme-cyan.png">https://github.com/DemianDeVante/Demian-Reaper-Effects/raw/e5d85286a4b1891e2fb4fe2d97fea031da5a9d5d/D%20Collection/themes/bitmap-simple/theme-cyan.png</source>
+      </version>
+    </reapack>
+  </category>
+</index>
